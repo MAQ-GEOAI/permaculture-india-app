@@ -2405,15 +2405,18 @@ const App = () => {
       });
       
       try {
-        // Ensure all layers are visible and wait for tiles
+        // Ensure all layers are visible and wait for ALL tiles to load
+        showToast('Loading all map tiles...', 'info');
         await prepareForExport();
         
-        // Wait longer for all map tiles and layers to fully render
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Additional wait for rendering to stabilize
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Get actual dimensions
         const mapWidth = mapContainer.offsetWidth || window.innerWidth;
         const mapHeight = mapContainer.offsetHeight || window.innerHeight;
+        
+        showToast('Capturing map...', 'info');
         
         // Capture with better options for Leaflet maps
         const canvas = await html2canvas(mapContainer, {
@@ -2422,12 +2425,19 @@ const App = () => {
           logging: false,
           width: mapWidth,
           height: mapHeight,
-          scale: 1.5, // Balanced quality and performance
+          scale: 1, // Use scale 1 to avoid tile misalignment issues
           allowTaint: true,
           foreignObjectRendering: false, // Better for Leaflet
           removeContainer: false,
-          imageTimeout: 20000,
+          imageTimeout: 30000, // Longer timeout for tiles
           proxy: undefined,
+          ignoreElements: (element) => {
+            // Ignore UI controls that are not part of the map
+            return element.classList && (
+              element.classList.contains('no-export') ||
+              (element.style && element.style.display === 'none')
+            );
+          },
           onclone: (clonedDoc) => {
             // Ensure map container is visible in clone
             const clonedMap = clonedDoc.getElementById('leaflet-map-container');
@@ -2437,6 +2447,14 @@ const App = () => {
               clonedMap.style.position = 'relative';
               clonedMap.style.width = mapWidth + 'px';
               clonedMap.style.height = mapHeight + 'px';
+              
+              // Ensure all tile images are visible
+              const tiles = clonedMap.querySelectorAll('img.leaflet-tile');
+              tiles.forEach((tile) => {
+                tile.style.visibility = 'visible';
+                tile.style.opacity = '1';
+                tile.style.display = 'block';
+              });
             }
             // Hide all controls in clone
             const clonedControls = clonedDoc.querySelectorAll('.absolute');
@@ -2510,20 +2528,18 @@ const App = () => {
       });
       
       try {
-        // Ensure all layers are visible and wait for tiles
+        // Ensure all layers are visible and wait for ALL tiles to load
+        showToast('Loading all map tiles...', 'info');
         await prepareForExport();
         
-        // Force map to render and wait longer for all tiles and layers
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-        }
-        
-        // Wait longer for map tiles and layers to fully render
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        // Additional wait for rendering to stabilize
+        await new Promise(resolve => setTimeout(resolve, 1000));
         
         // Get actual map container dimensions
         const mapWidth = mapContainer.offsetWidth || window.innerWidth;
         const mapHeight = mapContainer.offsetHeight || window.innerHeight;
+        
+        showToast('Capturing map...', 'info');
         
         // Capture the map with better options for Leaflet
         const canvas = await html2canvas(mapContainer, {
@@ -2532,11 +2548,11 @@ const App = () => {
           logging: false,
           width: mapWidth,
           height: mapHeight,
-          scale: 1.5, // Balanced quality and performance
+          scale: 1, // Use scale 1 to avoid tile misalignment issues
           allowTaint: true,
           foreignObjectRendering: false, // Better for Leaflet
           removeContainer: false,
-          imageTimeout: 20000,
+          imageTimeout: 30000, // Longer timeout for tiles
           onclone: (clonedDoc) => {
             // Ensure map container is visible in clone
             const clonedMap = clonedDoc.getElementById('leaflet-map-container');
@@ -2546,6 +2562,14 @@ const App = () => {
               clonedMap.style.position = 'relative';
               clonedMap.style.width = mapWidth + 'px';
               clonedMap.style.height = mapHeight + 'px';
+              
+              // Ensure all tile images are visible
+              const tiles = clonedMap.querySelectorAll('img.leaflet-tile');
+              tiles.forEach((tile) => {
+                tile.style.visibility = 'visible';
+                tile.style.opacity = '1';
+                tile.style.display = 'block';
+              });
             }
             // Hide all controls in clone
             const clonedControls = clonedDoc.querySelectorAll('.absolute');
