@@ -2292,8 +2292,60 @@ const App = () => {
   }, [aoi]);
   
   // ========== EXPORT & SHARE ==========
+  // Wait for all map tiles to load completely
+  const waitForAllTiles = (map) => {
+    return new Promise((resolve) => {
+      if (!map) {
+        resolve();
+        return;
+      }
+      
+      let tilesLoaded = 0;
+      let tilesTotal = 0;
+      let checkInterval;
+      let timeout;
+      
+      // Count all tiles
+      const countTiles = () => {
+        const tileImages = map.getContainer().querySelectorAll('img.leaflet-tile');
+        tilesTotal = tileImages.length;
+        
+        // Check if all tiles are loaded
+        let loadedCount = 0;
+        tileImages.forEach((img) => {
+          if (img.complete && img.naturalWidth > 0) {
+            loadedCount++;
+          }
+        });
+        
+        tilesLoaded = loadedCount;
+        
+        // If all tiles are loaded, resolve
+        if (tilesTotal > 0 && tilesLoaded === tilesTotal) {
+          clearInterval(checkInterval);
+          clearTimeout(timeout);
+          setTimeout(resolve, 500); // Extra wait for rendering
+          return;
+        }
+      };
+      
+      // Check every 100ms
+      checkInterval = setInterval(countTiles, 100);
+      
+      // Initial check
+      countTiles();
+      
+      // Timeout after 10 seconds
+      timeout = setTimeout(() => {
+        clearInterval(checkInterval);
+        logWarn('Tile loading timeout, proceeding with export');
+        resolve();
+      }, 10000);
+    });
+  };
+  
   // Ensure all visible layers are shown before export
-  const prepareForExport = () => {
+  const prepareForExport = async () => {
     if (!mapInstanceRef.current) return;
     
     // Ensure all enabled layers are visible
@@ -2308,6 +2360,20 @@ const App = () => {
     
     // Force map to redraw all layers
     mapInstanceRef.current.invalidateSize();
+    
+    // Wait for map to be ready
+    await new Promise((resolve) => {
+      if (mapInstanceRef.current) {
+        mapInstanceRef.current.whenReady(() => {
+          resolve();
+        });
+      } else {
+        resolve();
+      }
+    });
+    
+    // Wait for ALL tiles to load completely
+    await waitForAllTiles(mapInstanceRef.current);
   };
   
   const exportMapPNG = async () => {
@@ -2320,7 +2386,8 @@ const App = () => {
         html2canvas = (await import('html2canvas')).default;
       }
       
-      const mapContainer = mapRef.current?.parentElement;
+      // Get the actual map container element
+      const mapContainer = document.getElementById('leaflet-map-container');
       
       if (!mapContainer) {
         showToast('Map container not found', 'error');
@@ -2329,31 +2396,80 @@ const App = () => {
       
       showToast('Preparing export with all analysis layers...', 'info');
       
-      // Ensure all layers are visible
-      prepareForExport();
-      
-      // Wait a bit for map to render all layers
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      const canvas = await html2canvas(mapContainer, {
-        backgroundColor: '#1e293b',
-        useCORS: true,
-        logging: false,
-        width: mapContainer.offsetWidth,
-        height: mapContainer.offsetHeight,
-        scale: 2, // Higher quality
-        allowTaint: true
+      // Hide UI controls temporarily
+      const controls = document.querySelectorAll('.absolute.z-\\[1000\\], .absolute.z-\\[999\\]');
+      const originalDisplay = [];
+      controls.forEach((el, i) => {
+        originalDisplay[i] = el.style.display;
+        el.style.display = 'none';
       });
       
-      const link = document.createElement('a');
-      link.download = `permaculture-map-${Date.now()}.png`;
-      link.href = canvas.toDataURL('image/png', 1.0);
-      link.click();
-      
-      showToast('Map exported as PNG with all analysis layers', 'success');
+      try {
+        // Ensure all layers are visible and wait for tiles
+        await prepareForExport();
+        
+        // Wait longer for all map tiles and layers to fully render
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Get actual dimensions
+        const mapWidth = mapContainer.offsetWidth || window.innerWidth;
+        const mapHeight = mapContainer.offsetHeight || window.innerHeight;
+        
+        // Capture with better options for Leaflet maps
+        const canvas = await html2canvas(mapContainer, {
+          backgroundColor: '#1e293b',
+          useCORS: true,
+          logging: false,
+          width: mapWidth,
+          height: mapHeight,
+          scale: 1.5, // Balanced quality and performance
+          allowTaint: true,
+          foreignObjectRendering: false, // Better for Leaflet
+          removeContainer: false,
+          imageTimeout: 20000,
+          proxy: undefined,
+          onclone: (clonedDoc) => {
+            // Ensure map container is visible in clone
+            const clonedMap = clonedDoc.getElementById('leaflet-map-container');
+            if (clonedMap) {
+              clonedMap.style.visibility = 'visible';
+              clonedMap.style.display = 'block';
+              clonedMap.style.position = 'relative';
+              clonedMap.style.width = mapWidth + 'px';
+              clonedMap.style.height = mapHeight + 'px';
+            }
+            // Hide all controls in clone
+            const clonedControls = clonedDoc.querySelectorAll('.absolute');
+            clonedControls.forEach((el) => {
+              if (el.id !== 'leaflet-map-container' && 
+                  !el.closest('#leaflet-map-container')) {
+                el.style.display = 'none';
+              }
+            });
+          }
+        });
+        
+        // Restore UI controls
+        controls.forEach((el, i) => {
+          el.style.display = originalDisplay[i];
+        });
+        
+        const link = document.createElement('a');
+        link.download = `permaculture-map-${Date.now()}.png`;
+        link.href = canvas.toDataURL('image/png', 1.0);
+        link.click();
+        
+        showToast('Map exported as PNG successfully', 'success');
+      } catch (exportError) {
+        // Restore UI controls on error
+        controls.forEach((el, i) => {
+          el.style.display = originalDisplay[i];
+        });
+        throw exportError;
+      }
     } catch (error) {
       console.error('Export error:', error);
-      showToast('Export failed. Make sure html2canvas is loaded.', 'error');
+      showToast('Export failed: ' + (error.message || 'Unknown error'), 'error');
     }
   };
   
@@ -2375,8 +2491,9 @@ const App = () => {
         html2canvas = (await import('html2canvas')).default;
       }
       
-      // Use the map container directly, not parent
-      const mapContainer = mapRef.current;
+      // Get the actual map container element
+      const mapContainer = document.getElementById('leaflet-map-container');
+      
       if (!mapContainer) {
         showToast('Map container not found', 'error');
         return;
@@ -2384,70 +2501,101 @@ const App = () => {
       
       showToast('Generating PDF with all analysis layers...', 'info');
       
-      // Ensure all layers are visible
-      prepareForExport();
-      
-      // Force map to render and wait longer for all tiles and layers
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.invalidateSize();
-        mapInstanceRef.current.redraw();
-      }
-      
-      // Wait longer for map tiles and layers to fully render
-      await new Promise(resolve => setTimeout(resolve, 1500));
-      
-      // Get actual map container dimensions
-      const mapWidth = mapContainer.offsetWidth || window.innerWidth;
-      const mapHeight = mapContainer.offsetHeight || window.innerHeight;
-      
-      // Capture the map with better options
-      const canvas = await html2canvas(mapContainer, {
-        backgroundColor: '#1e293b',
-        useCORS: true,
-        logging: false,
-        width: mapWidth,
-        height: mapHeight,
-        scale: 2, // Higher quality
-        allowTaint: true,
-        foreignObjectRendering: true,
-        removeContainer: false,
-        imageTimeout: 15000,
-        onclone: (clonedDoc) => {
-          // Ensure all layers are visible in cloned document
-          const clonedMap = clonedDoc.querySelector('#leaflet-map-container');
-          if (clonedMap) {
-            clonedMap.style.visibility = 'visible';
-            clonedMap.style.display = 'block';
-          }
-        }
+      // Hide UI controls temporarily
+      const controls = document.querySelectorAll('.absolute.z-\\[1000\\], .absolute.z-\\[999\\]');
+      const originalDisplay = [];
+      controls.forEach((el, i) => {
+        originalDisplay[i] = el.style.display;
+        el.style.display = 'none';
       });
       
-      // Calculate PDF dimensions to fit properly
-      const pdfWidth = 297; // A4 landscape width in mm
-      const pdfHeight = 210; // A4 landscape height in mm
-      
-      // Calculate image dimensions maintaining aspect ratio
-      const imgAspectRatio = canvas.width / canvas.height;
-      let imgWidth = pdfWidth;
-      let imgHeight = pdfWidth / imgAspectRatio;
-      
-      // If image is taller than PDF, fit to height instead
-      if (imgHeight > pdfHeight) {
-        imgHeight = pdfHeight;
-        imgWidth = pdfHeight * imgAspectRatio;
+      try {
+        // Ensure all layers are visible and wait for tiles
+        await prepareForExport();
+        
+        // Force map to render and wait longer for all tiles and layers
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+        }
+        
+        // Wait longer for map tiles and layers to fully render
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
+        // Get actual map container dimensions
+        const mapWidth = mapContainer.offsetWidth || window.innerWidth;
+        const mapHeight = mapContainer.offsetHeight || window.innerHeight;
+        
+        // Capture the map with better options for Leaflet
+        const canvas = await html2canvas(mapContainer, {
+          backgroundColor: '#1e293b',
+          useCORS: true,
+          logging: false,
+          width: mapWidth,
+          height: mapHeight,
+          scale: 1.5, // Balanced quality and performance
+          allowTaint: true,
+          foreignObjectRendering: false, // Better for Leaflet
+          removeContainer: false,
+          imageTimeout: 20000,
+          onclone: (clonedDoc) => {
+            // Ensure map container is visible in clone
+            const clonedMap = clonedDoc.getElementById('leaflet-map-container');
+            if (clonedMap) {
+              clonedMap.style.visibility = 'visible';
+              clonedMap.style.display = 'block';
+              clonedMap.style.position = 'relative';
+              clonedMap.style.width = mapWidth + 'px';
+              clonedMap.style.height = mapHeight + 'px';
+            }
+            // Hide all controls in clone
+            const clonedControls = clonedDoc.querySelectorAll('.absolute');
+            clonedControls.forEach((el) => {
+              if (el.id !== 'leaflet-map-container' && 
+                  !el.closest('#leaflet-map-container')) {
+                el.style.display = 'none';
+              }
+            });
+          }
+        });
+        
+        // Restore UI controls
+        controls.forEach((el, i) => {
+          el.style.display = originalDisplay[i];
+        });
+        
+        // Calculate PDF dimensions to fit properly
+        const pdfWidth = 297; // A4 landscape width in mm
+        const pdfHeight = 210; // A4 landscape height in mm
+        
+        // Calculate image dimensions maintaining aspect ratio
+        const imgAspectRatio = canvas.width / canvas.height;
+        let imgWidth = pdfWidth;
+        let imgHeight = pdfWidth / imgAspectRatio;
+        
+        // If image is taller than PDF, fit to height instead
+        if (imgHeight > pdfHeight) {
+          imgHeight = pdfHeight;
+          imgWidth = pdfHeight * imgAspectRatio;
+        }
+        
+        const imgData = canvas.toDataURL('image/png', 1.0);
+        const pdf = new jsPDF('landscape', 'mm', 'a4');
+        
+        // Center the image on the page
+        const xOffset = (pdfWidth - imgWidth) / 2;
+        const yOffset = (pdfHeight - imgHeight) / 2;
+        
+        pdf.addImage(imgData, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
+        pdf.save(`permaculture-map-${Date.now()}.pdf`);
+        
+        showToast('Map exported as PDF successfully', 'success');
+      } catch (exportError) {
+        // Restore UI controls on error
+        controls.forEach((el, i) => {
+          el.style.display = originalDisplay[i];
+        });
+        throw exportError;
       }
-      
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const pdf = new jsPDF('landscape', 'mm', 'a4');
-      
-      // Center the image on the page
-      const xOffset = (pdfWidth - imgWidth) / 2;
-      const yOffset = (pdfHeight - imgHeight) / 2;
-      
-      pdf.addImage(imgData, 'PNG', xOffset, yOffset, imgWidth, imgHeight);
-      pdf.save(`permaculture-map-${Date.now()}.pdf`);
-      
-      showToast('Map exported as PDF successfully', 'success');
     } catch (error) {
       console.error('PDF export error:', error);
       showToast('PDF export failed: ' + (error.message || 'Unknown error'), 'error');
