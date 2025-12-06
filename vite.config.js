@@ -9,7 +9,7 @@ export default defineConfig({
   },
   root: '.',
   publicDir: 'assets',
-  base: process.env.NODE_ENV === 'production' ? '/permaculture-india-app/' : '/',
+  base: '/',
   build: {
     outDir: 'dist',
     assetsDir: 'assets',
