@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Permaculture Design Intelligence Platform</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🌱</text></svg>" />
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  
+  <!-- html2canvas for map export -->
+  <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+  
+  <!-- jsPDF for PDF export -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+    
+    /* Fix Leaflet icon paths */
+    .leaflet-container {
+      height: 100vh !important;
+      width: 100% !important;
+      position: relative !important;
+      z-index: 1;
+    }
+    
+    /* Ensure map container has dimensions */
+    #leaflet-map-container {
+      min-height: 100vh !important;
+      width: 100% !important;
+    }
+    
+    /* Print styles */
+    @media print {
+      .no-print {
+        display: none !important;
+      }
+    }
+  </style>
+  
+  <!-- Firebase and App Configuration - Load in head to ensure it's available before React -->
+  <script>
+    // Firebase configuration for perma-kisan-ai project
+    window.__firebase_config = {
+      apiKey: "AIzaSyDjj-uEFbm9nTavQbbYZLsRQFEszwbmk1E",
+      authDomain: "perma-kisan-ai.firebaseapp.com",
+      projectId: "perma-kisan-ai",
+      storageBucket: "perma-kisan-ai.firebasestorage.app",
+      messagingSenderId: "326558655442",
+      appId: "1:326558655442:web:3869cf82a3ecae0e1d9e0b"
+    };
+    
+    window.__app_id = "permaculture-app";
+    window.__initial_auth_token = null;
+    
+    // Verify config is set
+    console.log('Firebase config loaded in head:', window.__firebase_config ? 'OK' : 'MISSING');
+  </script>
+</head>
+<body>
+  <div id="root"></div>
+  
+  <!-- Load React app -->
+  <script type="module" src="/main.jsx"></script>
+</body>
+</html>
+

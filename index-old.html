@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Permaculture Intelligence System – India</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+<!-- MapLibre  -->
+<link href="https://unpkg.com/maplibre-gl@3.6.0/dist/maplibre-gl.css" rel="stylesheet" />
+<script src="https://unpkg.com/maplibre-gl@3.6.0/dist/maplibre-gl.js"></script>
+
+<!-- MapLibre Terrain -->
+<script src="https://cdn.jsdelivr.net/npm/@maptiler/terrain-rgb@1.0.0"></script>
+
+<!-- Turf.js -->
+<script src="https://unpkg.com/@turf/turf@6/turf.min.js"></script>
+
+<!-- Chart.js for sun path -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<!-- Tailwind CSS -->
+<script src="https://cdn.tailwindcss.com"></script>
+<!-- html2canvas for PNG export -->
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+
+<!-- jsPDF for PDF export -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<!-- JSZip for ZIP download -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+
+
+<link rel="stylesheet" href="style.css" />
+<link rel="manifest" href="manifest.json">
+
+</head>
+
+<body class="overflow-hidden">
+<div id="loader" class="loader">Processing…</div>
+
+<!-- SIDEBAR -->
+<div id="sidebar" class="sidebar shadow-xl">
+    <h1 class="title">Permaculture India</h1>
+
+    <div class="section">
+        <h2>AOI Tools</h2>
+        <button id="drawPolygonBtn" class="btn">Draw Area</button>
+        <button id="clearAOIBtn" class="btn">Clear</button>
+    </div>
+
+    <div class="section">
+        <h2>Contours</h2>
+        <select id="contourInterval" class="dropdown">
+            <option value="1">1 m interval</option>
+            <option value="2">2 m interval</option>
+            <option value="5">5 m interval</option>
+        </select>
+        <button id="loadContoursBtn" class="btn">Load Contours</button>
+    </div>
+
+    <div class="section">
+        <h2>Water Flow</h2>
+        <button id="runHydrologyBtn" class="btn">Run Hydrology</button>
+    </div>
+
+    <div class="section">
+        <h2>Sun Path</h2>
+        <button id="sunPathBtn" class="btn">Show Sun Path</button>
+    </div>
+
+    <div class="section">
+        <h2>AI Advisor</h2>
+        <textarea id="aiInput" class="textbox" placeholder="Ask about species, water, design..."></textarea>
+        <button id="askAI" class="btn">Ask</button>
+        <div id="aiOutput" class="ai-output"></div>
+    </div>
+
+    <div class="section">
+        <h2>Export</h2>
+        <button id="exportMapBtn" class="btn">Export Map</button>
+        <button id="exportAOIBtn" class="btn">Export AOI</button>
+        <button id="exportPNG" class="btn">Export Map (PNG)</button>
+        <button id="exportPDF" class="btn">Export PDF Report</button>
+        <button id="exportZIP" class="btn">Export ZIP (All Files)</button>
+
+    </div>
+</div>
+
+<!-- MAP -->
+<div id="map"></div>
+
+<script type="module" src="main.js"></script>
+<script>
+if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js');
+}
+</script>
+
+</body>
+</html>

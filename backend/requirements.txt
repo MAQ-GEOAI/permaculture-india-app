@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+rasterio
+numpy
+GDAL
+whitebox
+pysolar
+openai
+python-dotenv

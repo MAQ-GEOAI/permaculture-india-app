@@ -1,0 +1,372 @@
+{\rtf1\fbidis\ansi\ansicpg1252\deff0\nouicompat\deflang1033{\fonttbl{\f0\fnil\fcharset0 Calibri;}{\f1\fnil\fcharset1 Segoe UI Symbol;}{\f2\fnil Calibri;}{\f3\fnil\fcharset1 Segoe UI Emoji;}{\f4\fnil\fcharset1 Segoe UI Symbol;}{\f5\fnil\fcharset1 Cambria Math;}}
+{\colortbl ;\red0\green0\blue255;}
+{\*\generator Riched20 10.0.22621}{\*\mmathPr\mmathFont5\mwrapIndent1440 }\viewkind4\uc1 
+\pard\sa200\sl276\slmult1\f0\fs22\lang9 Permaculture Design Intelligence Platform\par
+AI-Assisted Hydrology, Contours, Sun Analysis & Regenerative Land Planning\par
+\par
+Live Demo: (add link after GitHub Pages deploy)\par
+Backend API: (add Render link once deployed)\par
+\par
+\f1\u-10179?\u-9012?\f2  \f0 Overview\par
+\par
+Permaculture Design Intelligence Platform is a web-based, AI-assisted geospatial application designed for land regeneration, water management, and sustainable agricultural planning across India.\par
+\par
+This platform provides professional tools to understand:\par
+\par
+Terrain\par
+\par
+Hydrology\par
+\par
+Sun Path\par
+\par
+Slope & Aspect\par
+\par
+Contours\par
+\par
+Soil & Vegetation\par
+\par
+Zone Planning\par
+\par
+Crop Suitability\par
+\par
+It transforms raw geography into actionable design intelligence, suitable for:\par
+\par
+Farmers\par
+\par
+Land Developers\par
+\par
+Environmental Consultants\par
+\par
+NGOs\par
+\par
+Ecologists\par
+\par
+Sustainability Teams\par
+\par
+Government Agencies\par
+\par
+Built using only open-source data and zero-cost cloud infrastructure, the system is deployable on GitHub Pages (frontend) and Render.com (backend).\par
+\par
+\f1\u-10179?\u-8576?\f2  \f0 Key Features\par
+\f3\u-10179?\u-8710?\u-497?\f2  \f0 Interactive Web Map\par
+\par
+Multi-basemap options: OSM, Satellite, Terrain, Light\par
+\par
+Smooth UI/UX with professional controls\par
+\par
+Pan, zoom, layer toggles\par
+\par
+\f3\u-10178?\u-8723?\f2  \f0 Draw Area of Interest (AOI)\par
+\par
+Users can draw polygons to define the region for analysis.\par
+Output available in GeoJSON.\par
+\par
+\f1\u-10179?\u-8709?\f2  \f0 Contour Generation\par
+\par
+Fetch DEM (SRTM/ALOS)\par
+\par
+Generate 5m / 2m / 1m contours\par
+\par
+Display as layered vectors\par
+\par
+Export as GeoJSON\par
+\par
+\f1\u-10179?\u-9049?\f2  \f0 Hydrology Engine\par
+\par
+Flow direction\par
+\par
+Flow accumulation\par
+\par
+Catchments\par
+\par
+Natural pond detection\par
+\par
+Runoff simulation\par
+\par
+Stream network extraction\par
+\par
+\f1\u-10180?\u-8418?\f2  \f0 Sun Path Analysis\par
+\par
+Annual sun trajectory\par
+\par
+Summer & winter solstice angles\par
+\par
+Seasonal sunrise/sunset\par
+\par
+Shadow direction\par
+\par
+Orientation recommendations\par
+\par
+\f1\u-10180?\u-8399?\f2  \f0 Crop Suitability Engine\par
+\par
+Based on:\par
+\par
+Slope\par
+\par
+Aspect\par
+\par
+Elevation\par
+\par
+Moisture\par
+\par
+Sun availability\par
+\par
+\f1\u-10180?\u-8432?\f2  \f0 Open Data Sources\par
+\par
+SRTM 30m DEM\par
+\par
+ALOS PALSAR DEM\par
+\par
+HydroSHEDS\par
+\par
+OSM (roads, rivers, buildings)\par
+\par
+Copernicus Landcover\par
+\par
+ERA5 Climate\par
+\par
+\f3\u-10178?\u-8736?\f2  \f0 AI Advisory System (Free, Rule-Based)\par
+\par
+Provides recommendations for:\par
+\par
+Swale placement\par
+\par
+Pond planning\par
+\par
+Windbreaks\par
+\par
+Building orientation\par
+\par
+Zone 0\f2\endash 5 layout\par
+\par
+Planting schemes\par
+\par
+\f1\u-10179?\u-8975?\f2  \f0 PWA \f2\endash  Installable App\par
+\par
+Works offline\par
+\par
+Installable on desktop & mobile\par
+\par
+Fast loading\par
+\par
+\f1\u-10179?\u-8986?\f2  \f0 Export Engine\par
+\par
+Exports:\par
+\par
+Map snapshot (PNG)\par
+\par
+PDF report\par
+\par
+AOI (GeoJSON)\par
+\par
+Contours (GeoJSON)\par
+\par
+Hydrology (GeoJSON)\par
+\par
+Sun path (CSV, GeoJSON)\par
+\par
+ZIP bundle\par
+\par
+\f3\u-10178?\u-8727?\f2  \f0 Tech Stack\par
+Frontend\par
+\par
+HTML\par
+\par
+CSS\par
+\par
+JavaScript\par
+\par
+Leaflet.js / Mapbox GL JS\par
+\par
+html2canvas\par
+\par
+jsPDF\par
+\par
+JSZip\par
+\par
+PWA (manifest + service worker)\par
+\par
+Backend\par
+\par
+FastAPI (Python)\par
+\par
+Rasterio\par
+\par
+RichDEM\par
+\par
+NumPy\par
+\par
+GDAL\par
+\par
+PySolar / Solar Geometry\par
+\par
+Hosting\par
+\par
+Frontend: GitHub Pages\par
+\par
+Backend: Render.com (Free Tier)\par
+\par
+Assets: Repo-based\par
+\par
+\f1\u-10179?\u-9023?\f2  \f0 Project Structure\par
+permaculture-india-app/\par
+\f4\u9474?\f0\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 index.html            # Main web app interface\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 style.css             # UI/UX styling\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 main.js               # Map logic + API integration\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 manifest.json         # PWA configuration\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 service-worker.js     # Offline capability\par
+\f4\u9474?\f0\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 assets/\par
+\f4\u9474?\f2    \f4\u9500?\u9472?\u9472?\f2  \f0 icons/\par
+\f4\u9474?\f2    \f4\u9474?\f2      \f4\u9500?\u9472?\u9472?\f2  \f0 icon-192.png\par
+\f4\u9474?\f2    \f4\u9474?\f2      \f4\u9500?\u9472?\u9472?\f2  \f0 icon-512.png\par
+\f4\u9474?\f2    \f4\u9500?\u9472?\u9472?\f2  \f0 img/\par
+\f4\u9474?\f2    \f4\u9474?\f2      \f4\u9492?\u9472?\u9472?\f2  \f0 preview.png\par
+\f4\u9474?\f2    \f4\u9492?\u9472?\u9472?\f2  \f0 data/\par
+\f4\u9474?\f2          \f4\u9500?\u9472?\u9472?\f2  \f0 plants.json\par
+\f4\u9474?\f2          \f4\u9500?\u9472?\u9472?\f2  \f0 suitability.json\par
+\f4\u9474?\f0\par
+\f4\u9492?\u9472?\u9472?\f2  \f0 README.md\par
+\par
+\par
+Backend repo:\par
+\par
+permaculture-backend/\par
+\f4\u9474?\f0\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 main.py\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 dem.py\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 hydrology.py\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 contours.py\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 sun.py\par
+\f4\u9500?\u9472?\u9472?\f2  \f0 soil.py\par
+\f4\u9492?\u9472?\u9472?\f2  \f0 ai_rules.py\par
+\par
+\f3\u-10178?\u-8723?\f2  \f0 How to Use\par
+\f4\u10004?\f2  \f0 1. Open the web app\par
+\par
+Choose a basemap \f5\u8594?\f2  \f0 draw an area of interest (AOI)\par
+\par
+\f4\u10004?\f2  \f0 2. Click Analyze\par
+\par
+The system runs backend processes:\par
+\par
+Fetch DEM\par
+\par
+Generate contours\par
+\par
+Run hydrology analysis\par
+\par
+Compute sun path\par
+\par
+\f4\u10004?\f2  \f0 3. Toggle layers in the sidebar\par
+\par
+Contours\par
+\par
+Flow paths\par
+\par
+Catchments\par
+\par
+Sun sectors\par
+\par
+Zones\par
+\par
+Roads, ponds, swales\par
+\par
+\f4\u10004?\f2  \f0 4. Export results\par
+\par
+PNG snapshot\par
+\par
+Full PDF report\par
+\par
+AOI/Contours/WaterFlow GeoJSON\par
+\par
+ZIP bundle\par
+\par
+\f1\u-10180?\u-8435?\f2  \f0 Vision\par
+\par
+To build India\f2\rquote\f0 s most powerful open-source permaculture design intelligence system, helping farmers and designers regenerate landscapes with science-backed insights.\par
+\par
+\f3\u-10178?\u-8727?\f2  \f0 Roadmap (Enterprise Level)\par
+Phase\tab Description\par
+Phase 1\tab Backend optimization, faster DEM processing\par
+Phase 2\tab 3D terrain, slope & aspect visualization\par
+Phase 3\tab Vegetation & soil classifiers\par
+Phase 4\tab Pond volume calculator & cut/fill model\par
+Phase 5\tab Advanced AI engine (permaculture rule logic)\par
+Phase 6\tab Multi-project workspace (SaaS)\par
+Phase 7\tab Team collaboration features\par
+Phase 8\tab API documentation & SDK\par
+Phase 9\tab Subscription/monetization model\par
+Phase 10\tab Enterprise dashboards & analytics\par
+\f3\u-10179?\u-8480?\u-497?\f2  \f0 Installation (Local Development)\par
+Clone the repo:\par
+git clone {{\field{\*\fldinst{HYPERLINK https://github.com/MAQ-GEOAI/permaculture-india-app }}{\fldrslt{https://github.com/MAQ-GEOAI/permaculture-india-app\ul0\cf0}}}}\f0\fs22\par
+cd permaculture-india-app\par
+\par
+Start local server:\par
+\par
+Use any static server, e.g.:\par
+\par
+npx http-server\par
+\par
+\par
+Then open:\par
+\par
+{{\field{\*\fldinst{HYPERLINK http://localhost:8080 }}{\fldrslt{http://localhost:8080\ul0\cf0}}}}\f0\fs22\par
+\par
+\f1\u-10180?\u-8432?\f2  \f0 Deployment\par
+Frontend: GitHub Pages\par
+\par
+Go to: Settings \f5\u8594?\f2  \f0 Pages\par
+\par
+Deploy from branch main\par
+\par
+Folder: / (root)\par
+\par
+Final URL:\par
+\par
+{{\field{\*\fldinst{HYPERLINK https://maq-geoai.github.io/permaculture-india-app/ }}{\fldrslt{https://maq-geoai.github.io/permaculture-india-app/\ul0\cf0}}}}\f0\fs22\par
+\par
+\f1\u-10178?\u-8931?\f2  \f0 Contributing\par
+\par
+We welcome:\par
+\par
+Hydrology experts\par
+\par
+GIS developers\par
+\par
+Permaculture designers\par
+\par
+AI engineers\par
+\par
+Sustainability researchers\par
+\par
+Fork the repo \f5\u8594?\f2  \f0 submit PR.\par
+\par
+\f1\u-10179?\u-8996?\f2  \f0 License\par
+\par
+MIT License \f2\endash  Free for commercial and personal use.\par
+Attribution appreciated.\par
+\par
+\f1\u-10179?\u-8625?\f2  \f0 Acknowledgements\par
+\par
+Special thanks to:\par
+\par
+Pearl River EcoDesign (inspiration)\par
+\par
+NASA SRTM\par
+\par
+JAXA ALOS\par
+\par
+HydroSHEDS\par
+\par
+OpenStreetMap\par
+\par
+Copernicus Landcover\par
+\par
+ERA5 Climate\par
+\par
+\f1\u-10180?\u-8417?\f2  \ldblquote\f0 Design landscapes intelligently. Restore nature scientifically.\f2\rdblquote\f0\lang9\par
+}
+ 
