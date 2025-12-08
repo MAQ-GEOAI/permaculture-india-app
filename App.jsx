@@ -877,11 +877,63 @@ const App = () => {
     }, 3000);
   };
   
+  // Helper function to calculate color from normalized elevation (0-1)
+  const getColorFromNormalized = useCallback((normalized) => {
+    // Clamp to 0-1
+    normalized = Math.max(0, Math.min(1, normalized));
+    
+    // Color gradient: Blue -> Cyan -> Green -> Yellow -> Orange -> Red
+    let r, g, b;
+    if (normalized < 0.2) {
+      // Blue to Cyan
+      r = 0;
+      g = Math.floor(100 + (normalized / 0.2) * 155);
+      b = Math.floor(200 + (normalized / 0.2) * 55);
+    } else if (normalized < 0.4) {
+      // Cyan to Green
+      const t = (normalized - 0.2) / 0.2;
+      r = 0;
+      g = 255;
+      b = Math.floor(255 - t * 155);
+    } else if (normalized < 0.6) {
+      // Green to Yellow
+      const t = (normalized - 0.4) / 0.2;
+      r = Math.floor(0 + t * 255);
+      g = 255;
+      b = Math.floor(100 - t * 100);
+    } else if (normalized < 0.8) {
+      // Yellow to Orange
+      const t = (normalized - 0.6) / 0.2;
+      r = 255;
+      g = Math.floor(255 - t * 100);
+      b = 0;
+    } else {
+      // Orange to Red
+      const t = (normalized - 0.8) / 0.2;
+      r = 255;
+      g = Math.floor(155 - t * 155);
+      b = 0;
+    }
+    return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
+  }, []);
+  
   // ========== SPECIALIZED CONTOUR RENDERING ==========
   const renderContours = useCallback((geojson, forceVisible = null) => {
     if (!mapInstanceRef.current || !geojson || !geojson.features) return;
     
     const map = mapInstanceRef.current;
+    
+    // Calculate min/max elevation for color normalization if not in properties
+    if (!geojson.properties?.min_elevation || !geojson.properties?.max_elevation) {
+      const elevations = geojson.features
+        .map(f => f.properties?.elevation || f.properties?.ELEV)
+        .filter(e => e != null && e !== undefined);
+      if (elevations.length > 0) {
+        geojson.properties = geojson.properties || {};
+        geojson.properties.min_elevation = Math.min(...elevations);
+        geojson.properties.max_elevation = Math.max(...elevations);
+      }
+    }
     
     // Remove existing contour layer and labels
     if (layerRefs.current.contours) {
@@ -911,7 +963,16 @@ const App = () => {
       const props = feature.properties || {};
       const elevation = props.elevation || props.ELEV || 0;
       const isBold = props.bold === true || props.weight > 1;
-      const color = props.color || (isBold ? '#1e40af' : '#3b82f6');
+      
+      // Use color from backend (professional gradient) or calculate fallback
+      let color = props.color;
+      if (!color || color === '#1e40af' || color === '#3b82f6') {
+        // Fallback: calculate color based on elevation if not provided or default blue
+        const minElev = geojson.properties?.min_elevation || 0;
+        const maxElev = geojson.properties?.max_elevation || 2000;
+        const normalized = maxElev > minElev ? (elevation - minElev) / (maxElev - minElev) : 0.5;
+        color = getColorFromNormalized(normalized);
+      }
       
       // Create polyline for contour
       const coords = feature.geometry.coordinates;
@@ -919,10 +980,11 @@ const App = () => {
       
       const contourLine = L.polyline(latlngs, {
         color: color,
-        weight: isBold ? 2.5 : 1,
-        opacity: isBold ? 0.9 : 0.7,
+        weight: isBold ? 3 : 1.5,  // Thicker lines for better visibility
+        opacity: isBold ? 0.95 : 0.85,  // More opaque for professional look
         lineCap: 'round',
-        lineJoin: 'round'
+        lineJoin: 'round',
+        smoothFactor: 1.0  // Smoother lines
       });
       
       // Add to appropriate group
@@ -983,7 +1045,7 @@ const App = () => {
       contourGroup.addTo(map);
       log(`Contours rendered: ${geojson.features.length} features (${boldContours.getLayers().length} bold)`);
     }
-  }, [layerVisibility.contours, contourShowLabels, log, logWarn]);
+  }, [layerVisibility.contours, contourShowLabels, log, logWarn, getColorFromNormalized]);
   
   // ========== LAYER RENDERING ==========
   const renderLayer = useCallback((layerKey, geojson, style, forceVisible = null) => {

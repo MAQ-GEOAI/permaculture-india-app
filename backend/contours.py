@@ -156,7 +156,9 @@ def generate_contours(bbox, interval=5, bold_interval=None):
                     'interval': interval,
                     'bold_interval': bold_interval,
                     'count': len(enhanced_features),
-                    'bbox': bbox
+                    'bbox': bbox,
+                    'min_elevation': min_elev,
+                    'max_elevation': max_elev
                 }
                 
                 if len(enhanced_features) == 0:
