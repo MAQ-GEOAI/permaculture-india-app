@@ -3541,25 +3541,99 @@ const App = () => {
               </button>
             </div>
             
-            {/* Export Raw Data Button */}
-            {analysisLayers.contours && (
-              <button
-                onClick={() => {
-                  const dataStr = JSON.stringify(analysisLayers.contours, null, 2);
-                  const dataBlob = new Blob([dataStr], { type: 'application/json' });
-                  const url = URL.createObjectURL(dataBlob);
-                  const link = document.createElement('a');
-                  link.href = url;
-                  link.download = `contours_${contourInterval}m_${Date.now()}.geojson`;
-                  link.click();
-                  URL.revokeObjectURL(url);
-                  showToast('Contour data exported as GeoJSON', 'success');
-                }}
-                className="w-full px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2"
-              >
-                <Download className="w-4 h-4" />
-                Export Raw Contour Data (GeoJSON)
-              </button>
+            {/* Export Raw Data Buttons */}
+            {analysisLayers.contours && aoi && (
+              <div className="space-y-2">
+                <button
+                  onClick={async () => {
+                    try {
+                      const bbox = getBboxString(aoi);
+                      if (!bbox) {
+                        showToast('Invalid AOI for export', 'error');
+                        return;
+                      }
+                      
+                      // Use backend export endpoint for raw data
+                      const response = await fetch(
+                        `${BACKEND_URL}/contours/export?bbox=${bbox}&interval=${contourInterval}&bold_interval=${contourBoldInterval}&format=geojson`
+                      );
+                      
+                      if (response.ok) {
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `contours_${contourInterval}m_${Date.now()}.geojson`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        showToast('Raw contour layer exported as GeoJSON', 'success');
+                      } else {
+                        // Fallback to client-side export
+                        const dataStr = JSON.stringify(analysisLayers.contours, null, 2);
+                        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                        const url = URL.createObjectURL(dataBlob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `contours_${contourInterval}m_${Date.now()}.geojson`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        showToast('Contour data exported as GeoJSON (fallback)', 'success');
+                      }
+                    } catch (error) {
+                      logError('Export error:', error);
+                      // Fallback
+                      const dataStr = JSON.stringify(analysisLayers.contours, null, 2);
+                      const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                      const url = URL.createObjectURL(dataBlob);
+                      const link = document.createElement('a');
+                      link.href = url;
+                      link.download = `contours_${contourInterval}m_${Date.now()}.geojson`;
+                      link.click();
+                      URL.revokeObjectURL(url);
+                      showToast('Contour data exported (offline mode)', 'info');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export Raw Contour Layer (GeoJSON)
+                </button>
+                <button
+                  onClick={async () => {
+                    try {
+                      const bbox = getBboxString(aoi);
+                      if (!bbox) {
+                        showToast('Invalid AOI for export', 'error');
+                        return;
+                      }
+                      
+                      const response = await fetch(
+                        `${BACKEND_URL}/contours/export?bbox=${bbox}&interval=${contourInterval}&bold_interval=${contourBoldInterval}&format=kml`
+                      );
+                      
+                      if (response.ok) {
+                        const blob = await response.blob();
+                        const url = URL.createObjectURL(blob);
+                        const link = document.createElement('a');
+                        link.href = url;
+                        link.download = `contours_${contourInterval}m_${Date.now()}.kml`;
+                        link.click();
+                        URL.revokeObjectURL(url);
+                        showToast('Raw contour layer exported as KML', 'success');
+                      } else {
+                        showToast('KML export unavailable', 'error');
+                      }
+                    } catch (error) {
+                      logError('KML export error:', error);
+                      showToast('KML export failed', 'error');
+                    }
+                  }}
+                  className="w-full px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2"
+                >
+                  <Download className="w-4 h-4" />
+                  Export as KML (Google Earth)
+                </button>
+              </div>
             )}
           </div>
         </div>
