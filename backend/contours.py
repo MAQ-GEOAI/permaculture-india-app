@@ -70,6 +70,31 @@ def generate_contours(bbox, interval=5, bold_interval=None):
             
             # Validate and enhance contour data
             if data.get('type') == 'FeatureCollection' and len(data.get('features', [])) > 0:
+                # First pass: collect all elevations for color normalization
+                elevations = []
+                for feature in data['features']:
+                    if 'properties' not in feature:
+                        feature['properties'] = {}
+                    
+                    # Extract elevation
+                    if 'elevation' not in feature['properties']:
+                        if 'ELEV' in feature['properties']:
+                            feature['properties']['elevation'] = feature['properties']['ELEV']
+                        else:
+                            coords = feature.get('geometry', {}).get('coordinates', [])
+                            if coords and len(coords[0]) > 2:
+                                z_values = [c[2] for c in coords[0] if len(c) > 2]
+                                if z_values:
+                                    feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
+                    
+                    elevation = feature['properties'].get('elevation')
+                    if elevation is not None:
+                        elevations.append(elevation)
+                
+                # Calculate min/max for color normalization
+                min_elev = min(elevations) if elevations else None
+                max_elev = max(elevations) if elevations else None
+                
                 # Process and enhance each contour feature
                 enhanced_features = []
                 
@@ -100,7 +125,7 @@ def generate_contours(bbox, interval=5, bold_interval=None):
                         # Check if this elevation is a multiple of bold_interval
                         if elevation % (interval * bold_interval) == 0:
                             feature['properties']['bold'] = True
-                            feature['properties']['weight'] = 2  # Thicker line
+                            feature['properties']['weight'] = 2.5  # Thicker line
                         else:
                             feature['properties']['bold'] = False
                             feature['properties']['weight'] = 1
@@ -108,8 +133,8 @@ def generate_contours(bbox, interval=5, bold_interval=None):
                         feature['properties']['bold'] = False
                         feature['properties']['weight'] = 1
                     
-                    # Add color based on elevation (optional - for gradient)
-                    feature['properties']['color'] = get_contour_color(elevation)
+                    # Add color based on elevation with normalization (professional gradient)
+                    feature['properties']['color'] = get_contour_color(elevation, min_elev, max_elev)
                     
                     # Filter contours within bounding box
                     coords = feature.get('geometry', {}).get('coordinates', [])
@@ -156,22 +181,59 @@ def generate_contours(bbox, interval=5, bold_interval=None):
             error_msg = e.stderr if e.stderr else str(e)
             raise Exception(f"GDAL contour generation failed: {error_msg}")
 
-def get_contour_color(elevation):
+def get_contour_color(elevation, min_elev=None, max_elev=None):
     """
-    Get color for contour based on elevation (gradient from low to high)
-    Lower elevations: blue/green, Higher elevations: brown/red
+    Get color for contour based on elevation with professional gradient
+    Similar to contourmap.app - blue (low) to red (high)
     """
     if elevation is None:
-        return '#1e40af'  # Default blue
+        return '#3b82f6'  # Default blue
     
-    # Color gradient based on elevation
-    if elevation < 100:
-        return '#3b82f6'  # Blue (sea level)
-    elif elevation < 500:
-        return '#10b981'  # Green (lowlands)
-    elif elevation < 1000:
-        return '#f59e0b'  # Orange (hills)
-    elif elevation < 2000:
-        return '#ef4444'  # Red (mountains)
+    # Normalize elevation if min/max provided
+    if min_elev is not None and max_elev is not None and max_elev > min_elev:
+        normalized = (elevation - min_elev) / (max_elev - min_elev)
+        normalized = max(0, min(1, normalized))  # Clamp to 0-1
     else:
-        return '#7c3aed'  # Purple (high mountains)
+        # Use absolute elevation ranges
+        if elevation < 0:
+            normalized = 0
+        elif elevation < 500:
+            normalized = elevation / 500.0 * 0.3  # 0-0.3 for 0-500m
+        elif elevation < 2000:
+            normalized = 0.3 + (elevation - 500) / 1500.0 * 0.5  # 0.3-0.8 for 500-2000m
+        else:
+            normalized = 0.8 + min((elevation - 2000) / 3000.0, 0.2)  # 0.8-1.0 for 2000m+
+    
+    # Color gradient: Blue -> Cyan -> Green -> Yellow -> Orange -> Red
+    # Similar to contourmap.app color scheme
+    if normalized < 0.2:
+        # Blue to Cyan (low elevations)
+        r = int(0 + (normalized / 0.2) * 0)
+        g = int(100 + (normalized / 0.2) * 155)
+        b = int(200 + (normalized / 0.2) * 55)
+    elif normalized < 0.4:
+        # Cyan to Green
+        t = (normalized - 0.2) / 0.2
+        r = int(0)
+        g = int(255)
+        b = int(255 - t * 155)
+    elif normalized < 0.6:
+        # Green to Yellow
+        t = (normalized - 0.4) / 0.2
+        r = int(0 + t * 255)
+        g = int(255)
+        b = int(100 - t * 100)
+    elif normalized < 0.8:
+        # Yellow to Orange
+        t = (normalized - 0.6) / 0.2
+        r = int(255)
+        g = int(255 - t * 100)
+        b = int(0)
+    else:
+        # Orange to Red
+        t = (normalized - 0.8) / 0.2
+        r = int(255)
+        g = int(155 - t * 155)
+        b = int(0)
+    
+    return f"#{r:02x}{g:02x}{b:02x}"

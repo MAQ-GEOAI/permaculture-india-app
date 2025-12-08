@@ -6,6 +6,9 @@ from rasterio.merge import merge
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 import time
 import math
+import numpy as np
+from io import BytesIO
+import zipfile
 
 DEM_FOLDER = "data/dem_tiles"
 os.makedirs(DEM_FOLDER, exist_ok=True)
@@ -61,43 +64,60 @@ def download_dem(lat, lon, bbox=None):
     return download_single_dem_tile(int(lat), int(lon), is_india)
 
 def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
-    """Download a single DEM tile"""
+    """Download a single DEM tile with improved sources"""
     tile = f"{tile_lat}_{tile_lon}.tif"
     path = f"{DEM_FOLDER}/{tile}"
 
     if os.path.exists(path):
         return path
 
-    # Priority sources for India
+    # Priority sources for India - improved order
     if is_india:
         sources = [
-            # Source 1: SRTM 30m (NASA) - Best for India
-            f"https://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/{get_srtm_tile_name(tile_lat, tile_lon)}.SRTMGL1.hgt.zip",
-            # Source 2: AWS SRTM (Skadi format - 30m resolution)
-            f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
-            # Source 3: NASA SRTM (alternative AWS endpoint)
-            f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
-            # Source 4: ASTER GDEM (30m, good for India)
-            f"https://e4ftl01.cr.usgs.gov/ASTT/ASTGTM.003/2000.03.01/ASTGTM2_{get_srtm_tile_name(tile_lat, tile_lon)}.zip",
-            # Source 5: OpenTopoMap DEM
-            f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
+            # Source 1: AWS SRTM Skadi (30m, most reliable)
+            {
+                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
+                'type': 'tif'
+            },
+            # Source 2: Alternative AWS endpoint
+            {
+                'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
+                'type': 'tif'
+            },
+            # Source 3: OpenTopoMap DEM (good quality)
+            {
+                'url': f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
+                'type': 'tif'
+            },
+            # Source 4: SRTM via MapTiler (if available)
+            {
+                'url': f"https://api.maptiler.com/tiles/terrain-rgb/{tile_lat}/{tile_lon}.png?key=free",
+                'type': 'terrain-rgb'
+            },
         ]
     else:
         # Global sources
         sources = [
-            f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
-            f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
-            f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
+            {
+                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
+                'type': 'tif'
+            },
+            {
+                'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
+                'type': 'tif'
+            },
+            {
+                'url': f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
+                'type': 'tif'
+            },
         ]
     
-    for url in sources:
+    for source in sources:
         try:
-            # Handle zip files (SRTM HGT format)
-            if url.endswith('.zip'):
-                # For now, skip zip files (would need zipfile extraction)
-                continue
+            url = source['url']
+            source_type = source.get('type', 'tif')
             
-            r = requests.get(url, timeout=15, headers={'User-Agent': 'Permaculture-App/1.0'})
+            r = requests.get(url, timeout=20, headers={'User-Agent': 'Permaculture-App/1.0'})
             if r.status_code == 200 and len(r.content) > 1000:
                 with open(path, "wb") as f:
                     f.write(r.content)
@@ -106,7 +126,10 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
                 try:
                     with rasterio.open(path) as src:
                         if src.count > 0 and src.width > 0 and src.height > 0:
-                            return path
+                            # Check if data is valid (not all zeros or nodata)
+                            data = src.read(1)
+                            if np.any(data != src.nodata) and np.any(data != 0):
+                                return path
                 except Exception as e:
                     if os.path.exists(path):
                         os.remove(path)
