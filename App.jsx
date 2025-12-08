@@ -207,6 +207,11 @@ const App = () => {
   const [aiGoal, setAiGoal] = useState('');
   const [aiStrategy, setAiStrategy] = useState(null);
   
+  // Contour Settings
+  const [contourInterval, setContourInterval] = useState(5); // Default 5m interval
+  const [contourBoldInterval, setContourBoldInterval] = useState(5); // Every 5th contour is bold
+  const [contourShowLabels, setContourShowLabels] = useState(true);
+  
   // Search & Navigation
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
@@ -872,8 +877,122 @@ const App = () => {
     }, 3000);
   };
   
+  // ========== SPECIALIZED CONTOUR RENDERING ==========
+  const renderContours = useCallback((geojson, forceVisible = null) => {
+    if (!mapInstanceRef.current || !geojson || !geojson.features) return;
+    
+    const map = mapInstanceRef.current;
+    
+    // Remove existing contour layer and labels
+    if (layerRefs.current.contours) {
+      try {
+        map.removeLayer(layerRefs.current.contours);
+      } catch (e) {
+        logWarn(`Error removing contours layer:`, e);
+      }
+      layerRefs.current.contours = null;
+    }
+    
+    // Clear existing label markers
+    labelMarkersRef.current.forEach(marker => {
+      try {
+        map.removeLayer(marker);
+      } catch (e) {}
+    });
+    labelMarkersRef.current = [];
+    
+    // Create feature groups for regular and bold contours
+    const regularContours = L.featureGroup();
+    const boldContours = L.featureGroup();
+    
+    geojson.features.forEach((feature) => {
+      if (!feature.geometry || !feature.geometry.coordinates) return;
+      
+      const props = feature.properties || {};
+      const elevation = props.elevation || props.ELEV || 0;
+      const isBold = props.bold === true || props.weight > 1;
+      const color = props.color || (isBold ? '#1e40af' : '#3b82f6');
+      
+      // Create polyline for contour
+      const coords = feature.geometry.coordinates;
+      const latlngs = coords.map(coord => [coord[1], coord[0]]); // [lat, lng]
+      
+      const contourLine = L.polyline(latlngs, {
+        color: color,
+        weight: isBold ? 2.5 : 1,
+        opacity: isBold ? 0.9 : 0.7,
+        lineCap: 'round',
+        lineJoin: 'round'
+      });
+      
+      // Add to appropriate group
+      if (isBold) {
+        boldContours.addLayer(contourLine);
+      } else {
+        regularContours.addLayer(contourLine);
+      }
+      
+      // Add elevation label if enabled
+      if (contourShowLabels && elevation !== null && elevation !== undefined) {
+        // Place label at midpoint of contour line
+        const midIndex = Math.floor(latlngs.length / 2);
+        const labelPos = latlngs[midIndex];
+        
+        // Create label with elevation text
+        const labelDiv = L.divIcon({
+          className: 'contour-label',
+          html: `<div style="
+            background: rgba(255, 255, 255, 0.9);
+            border: 1px solid ${color};
+            border-radius: 3px;
+            padding: 2px 6px;
+            font-size: 11px;
+            font-weight: ${isBold ? 'bold' : 'normal'};
+            color: ${color};
+            white-space: nowrap;
+            pointer-events: none;
+            text-shadow: 0 0 2px white;
+          ">${elevation}m</div>`,
+          iconSize: [50, 20],
+          iconAnchor: [25, 10]
+        });
+        
+        const labelMarker = L.marker(labelPos, { icon: labelDiv });
+        labelMarkersRef.current.push(labelMarker);
+        
+        if (forceVisible !== null ? forceVisible : layerVisibility.contours) {
+          labelMarker.addTo(map);
+        }
+      }
+      
+      // Add popup with elevation info
+      contourLine.bindPopup(`
+        <div style="font-weight: bold; margin-bottom: 5px;">Contour Line</div>
+        <div><strong>Elevation:</strong> ${elevation}m</div>
+        ${isBold ? '<div style="color: #1e40af;"><strong>Bold Contour</strong></div>' : ''}
+      `);
+    });
+    
+    // Combine into single layer group
+    const contourGroup = L.featureGroup([regularContours, boldContours]);
+    layerRefs.current.contours = contourGroup;
+    
+    // Add to map if visible
+    const shouldBeVisible = forceVisible !== null ? forceVisible : (layerVisibility.contours === true);
+    if (shouldBeVisible) {
+      contourGroup.addTo(map);
+      log(`Contours rendered: ${geojson.features.length} features (${boldContours.getLayers().length} bold)`);
+    }
+  }, [layerVisibility.contours, contourShowLabels, log, logWarn]);
+  
   // ========== LAYER RENDERING ==========
   const renderLayer = useCallback((layerKey, geojson, style, forceVisible = null) => {
+    // Special handling for contours
+    if (layerKey === 'contours') {
+      renderContours(geojson, forceVisible);
+      return;
+    }
+    
     if (!mapInstanceRef.current) return;
     
     const map = mapInstanceRef.current;
@@ -928,7 +1047,7 @@ const App = () => {
     } else {
       logWarn(`Layer ${layerKey} has no valid features to render`);
     }
-  }, [layerVisibility]);
+  }, [layerVisibility, renderContours]);
   
   // ========== LAYER VISIBILITY TOGGLE ==========
   useEffect(() => {
@@ -947,9 +1066,27 @@ const App = () => {
           if (isVisible && !isOnMap) {
             layer.addTo(map);
             log(`Layer ${layerKey} toggled ON`);
+            
+            // Special handling for contours: show/hide labels
+            if (layerKey === 'contours' && contourShowLabels) {
+              labelMarkersRef.current.forEach(marker => {
+                if (marker && !map.hasLayer(marker)) {
+                  marker.addTo(map);
+                }
+              });
+            }
           } else if (!isVisible && isOnMap) {
             map.removeLayer(layer);
             log(`Layer ${layerKey} toggled OFF`);
+            
+            // Special handling for contours: hide labels
+            if (layerKey === 'contours') {
+              labelMarkersRef.current.forEach(marker => {
+                if (marker && map.hasLayer(marker)) {
+                  map.removeLayer(marker);
+                }
+              });
+            }
           }
         } catch (e) {
           logError(`Error toggling layer ${layerKey}:`, e);
@@ -961,7 +1098,7 @@ const App = () => {
         }
       }
     });
-  }, [layerVisibility]);
+  }, [layerVisibility, contourShowLabels, log, logError]);
   
   // ========== ANALYSIS FUNCTIONS ==========
   const runAnalysis = async () => {
@@ -980,9 +1117,10 @@ const App = () => {
     }
     
     try {
-      // Run all analyses in parallel
+      // Run all analyses in parallel with user-selected contour interval
+      const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
       const [contoursRes, hydrologyRes] = await Promise.allSettled([
-        fetch(`${BACKEND_URL}/contours?bbox=${bbox}&interval=5`),
+        fetch(contourUrl),
         fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`)
       ]);
       
@@ -994,17 +1132,22 @@ const App = () => {
         // Auto-enable contours layer
         setLayerVisibility(prev => ({ ...prev, contours: true }));
         
-        // Render immediately with forceVisible=true
-        renderLayer('contours', contoursData, {
-          color: '#1e40af',
-          weight: 1,
-          opacity: 0.7
-        }, true);
+        // Render with specialized contour rendering (handles labels and bold contours)
+        renderContours(contoursData, true);
         
-        showToast('Contours layer added!', 'success');
+        const count = contoursData.features?.length || 0;
+        showToast(`Contours generated: ${count} lines (${contourInterval}m interval)`, 'success');
       } else if (contoursRes.status === 'fulfilled' && !contoursRes.value.ok) {
-        logWarn('Contours request failed:', contoursRes.value.status);
-        showToast('Contours analysis unavailable', 'info');
+        const errorText = await contoursRes.value.text().catch(() => 'Unknown error');
+        logWarn('Contours request failed:', contoursRes.value.status, errorText);
+        showToast(`Contours unavailable (${contoursRes.value.status}). Trying fallback...`, 'info');
+        
+        // Try fallback visualization
+        generateFallbackContours();
+      } else {
+        logWarn('Contours request error:', contoursRes.reason);
+        showToast('Contours analysis unavailable. Using fallback visualization.', 'info');
+        generateFallbackContours();
       }
       
       // Process hydrology
@@ -1561,6 +1704,54 @@ const App = () => {
     });
     
     return L.layerGroup([polygon]);
+  };
+  
+  // Generate fallback contours when backend is unavailable
+  const generateFallbackContours = () => {
+    if (!aoi || !mapInstanceRef.current) {
+      logWarn('Cannot create fallback contours: no AOI or map');
+      return;
+    }
+    
+    const coords = aoi.geometry.coordinates[0];
+    const bbox = getBboxString(aoi);
+    const [minLng, minLat, maxLng, maxLat] = bbox.split(',').map(Number);
+    const lngRange = maxLng - minLng;
+    const latRange = maxLat - minLat;
+    
+    // Create realistic sample contours
+    const sampleContours = {
+      type: 'FeatureCollection',
+      features: Array.from({ length: 10 }, (_, i) => {
+        const elevation = 100 + i * contourInterval;
+        const offset = (i - 5) * 0.0003;
+        const contourCoords = coords.map(([lng, lat]) => [
+          lng + offset * (lngRange / 0.01),
+          lat + offset * (latRange / 0.01)
+        ]);
+        contourCoords.push(contourCoords[0]);
+        
+        return {
+          type: 'Feature',
+          geometry: {
+            type: 'LineString',
+            coordinates: contourCoords
+          },
+          properties: {
+            elevation: elevation,
+            name: `${elevation}m`,
+            bold: i % contourBoldInterval === 0,
+            weight: i % contourBoldInterval === 0 ? 2 : 1,
+            color: '#3b82f6'
+          }
+        };
+      })
+    };
+    
+    setAnalysisLayers(prev => ({ ...prev, contours: sampleContours }));
+    setLayerVisibility(prev => ({ ...prev, contours: true }));
+    renderContours(sampleContours, true);
+    showToast('Using fallback contours (backend unavailable)', 'info');
   };
   
   // Create fallback visualizations when backend is unavailable
@@ -3216,6 +3407,99 @@ const App = () => {
               Draw an area first to enable analysis
             </p>
           )}
+        </div>
+        
+        {/* Contour Settings */}
+        <div className="p-4 border-b border-slate-700">
+          <div className="flex items-center gap-2 mb-3">
+            <Mountain className="w-5 h-5 text-emerald-400" />
+            <h3 className="text-sm font-semibold text-slate-200">Contour Settings</h3>
+          </div>
+          
+          <div className="space-y-3">
+            {/* Contour Interval Selector */}
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Contour Interval (meters)</label>
+              <select
+                value={contourInterval}
+                onChange={(e) => setContourInterval(parseFloat(e.target.value))}
+                className="w-full px-3 py-2 bg-slate-700 text-slate-200 rounded border border-slate-600 focus:border-emerald-500 focus:outline-none text-sm"
+              >
+                <option value={0.5}>0.5 m</option>
+                <option value={1}>1 m</option>
+                <option value={2}>2 m</option>
+                <option value={5}>5 m</option>
+                <option value={10}>10 m</option>
+                <option value={20}>20 m</option>
+                <option value={50}>50 m</option>
+                <option value={100}>100 m</option>
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Smaller intervals = more detailed contours
+              </p>
+            </div>
+            
+            {/* Bold Contour Interval */}
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">Bold Every Nth Contour</label>
+              <select
+                value={contourBoldInterval}
+                onChange={(e) => setContourBoldInterval(parseInt(e.target.value))}
+                className="w-full px-3 py-2 bg-slate-700 text-slate-200 rounded border border-slate-600 focus:border-emerald-500 focus:outline-none text-sm"
+              >
+                <option value={0}>None</option>
+                <option value={2}>Every 2nd</option>
+                <option value={5}>Every 5th</option>
+                <option value={10}>Every 10th</option>
+                <option value={20}>Every 20th</option>
+              </select>
+              <p className="mt-1 text-xs text-slate-500">
+                Makes every Nth contour line thicker for better visibility
+              </p>
+            </div>
+            
+            {/* Show Labels Toggle */}
+            <div className="flex items-center justify-between">
+              <label className="text-xs text-slate-400">Show Elevation Labels</label>
+              <button
+                onClick={() => {
+                  setContourShowLabels(!contourShowLabels);
+                  // Re-render contours with new label setting
+                  if (analysisLayers.contours) {
+                    renderContours(analysisLayers.contours, layerVisibility.contours);
+                  }
+                }}
+                className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                  contourShowLabels
+                    ? 'bg-emerald-600 text-white'
+                    : 'bg-slate-700 text-slate-300'
+                }`}
+              >
+                {contourShowLabels ? 'ON' : 'OFF'}
+              </button>
+            </div>
+            
+            {/* Export Raw Data Button */}
+            {analysisLayers.contours && (
+              <button
+                onClick={() => {
+                  const dataStr = JSON.stringify(analysisLayers.contours, null, 2);
+                  const dataBlob = new Blob([dataStr], { type: 'application/json' });
+                  const url = URL.createObjectURL(dataBlob);
+                  const link = document.createElement('a');
+                  link.href = url;
+                  link.download = `contours_${contourInterval}m_${Date.now()}.geojson`;
+                  link.click();
+                  URL.revokeObjectURL(url);
+                  showToast('Contour data exported as GeoJSON', 'success');
+                }}
+                className="w-full px-3 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded text-xs font-medium flex items-center justify-center gap-2"
+              >
+                <Download className="w-4 h-4" />
+                Export Raw Contour Data (GeoJSON)
+              </button>
+            )}
+          </div>
         </div>
         
         {/* 3D Visualization Toggle */}

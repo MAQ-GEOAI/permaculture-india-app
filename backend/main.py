@@ -34,8 +34,16 @@ def dem_tile(bbox: str):
     return get_dem_tile(bbox)
 
 @app.get("/contours")
-def contour_endpoint(bbox: str, interval: int = 2):
-    return generate_contours(bbox, interval)
+def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
+    """
+    Generate contours with professional features
+    
+    Args:
+        bbox: Bounding box "minx,miny,maxx,maxy"
+        interval: Contour interval in meters (0.5, 1, 2, 5, 10, 20, 50, 100)
+        bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour)
+    """
+    return generate_contours(bbox, interval=interval, bold_interval=bold_interval)
 
 @app.get("/hydrology")
 def hydro_endpoint(bbox: str):
