@@ -51,8 +51,14 @@ def download_dem(lat, lon, bbox=None):
                 if tile_path and os.path.exists(tile_path):
                     tiles.append(tile_path)
         
+        # If no tiles downloaded, try elevation API as fallback
         if not tiles:
-            raise Exception("Failed to download any DEM tiles")
+            try:
+                from elevation_api import create_dem_from_api
+                print("[UTILS] No DEM tiles available, using OpenElevation API...")
+                return create_dem_from_api(bbox, resolution=30)
+            except Exception as e:
+                raise Exception(f"Failed to download DEM tiles and elevation API failed: {str(e)}")
         
         # Merge tiles if multiple
         if len(tiles) == 1:
@@ -61,7 +67,20 @@ def download_dem(lat, lon, bbox=None):
             return merge_dem_tiles(tiles, bbox)
     
     # Single tile download
-    return download_single_dem_tile(int(lat), int(lon), is_india)
+    tile_path = download_single_dem_tile(int(lat), int(lon), is_india)
+    
+    # If single tile fails, try elevation API for small area
+    if not tile_path:
+        try:
+            from elevation_api import create_dem_from_api
+            # Create small bbox around point
+            buffer = 0.01  # ~1km
+            bbox = (lon - buffer, lat - buffer, lon + buffer, lat + buffer)
+            return create_dem_from_api(bbox, resolution=30)
+        except:
+            raise Exception(f"Failed to download DEM tile for lat={lat}, lon={lon}")
+    
+    return tile_path
 
 def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     """Download a single DEM tile with improved sources"""

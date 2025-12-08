@@ -4,7 +4,13 @@ import subprocess
 import json
 import os
 import math
+import numpy as np
+import rasterio
 from utils import download_dem
+
+# Simple logging function
+def log(msg):
+    print(f"[CONTOURS] {msg}")
 
 def generate_contours(bbox, interval=5, bold_interval=None):
     """
@@ -32,14 +38,52 @@ def generate_contours(bbox, interval=5, bold_interval=None):
     )
 
     # Download DEM with multiple tiles merged for better coverage
+    dem_path = None
+    dem_error = None
+    
     try:
         dem_path = download_dem(center_lat, center_lon, bbox=dem_bbox)
+        
+        # CRITICAL: Verify DEM has valid, varying elevation data (not uniform)
+        if dem_path and os.path.exists(dem_path):
+            with rasterio.open(dem_path) as src:
+                data = src.read(1)
+                valid_data = data[(data != src.nodata) & (data != 0) & ~np.isnan(data)]
+                
+                if len(valid_data) == 0:
+                    raise Exception("DEM contains no valid elevation data")
+                
+                # Check if data actually varies (not uniform - this is the key issue!)
+                data_std = np.std(valid_data)
+                data_range = np.max(valid_data) - np.min(valid_data)
+                
+                if data_std < 0.5 or data_range < 1.0:
+                    raise Exception(f"DEM data is uniform/invalid (std={data_std:.2f}m, range={data_range:.2f}m) - not real terrain")
+                
+                log(f"DEM validated: {len(valid_data)} valid points, elevation range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m, std={data_std:.2f}m")
+                
     except Exception as e:
-        # Fallback: try single tile
+        dem_error = str(e)
+        log(f"DEM download/validation failed: {dem_error}")
+        
+        # Try elevation API as fallback for real terrain data
         try:
-            dem_path = download_dem(center_lat, center_lon)
-        except:
-            raise Exception(f"Failed to download DEM: {str(e)}")
+            from elevation_api import create_dem_from_api
+            log("Attempting to use OpenElevation API for real terrain data...")
+            dem_path = create_dem_from_api(dem_bbox, resolution=30)
+            
+            # Validate API-generated DEM too
+            with rasterio.open(dem_path) as src:
+                data = src.read(1)
+                valid_data = data[~np.isnan(data)]
+                if len(valid_data) > 0:
+                    data_std = np.std(valid_data)
+                    data_range = np.max(valid_data) - np.min(valid_data)
+                    if data_std < 0.5:
+                        raise Exception(f"API elevation data is uniform (std={data_std:.2f}m) - may not be accurate")
+                    log(f"API DEM validated: elevation range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m")
+        except Exception as api_error:
+            raise Exception(f"Cannot generate real terrain contours. DEM failed: {dem_error}. API failed: {str(api_error)}. Please ensure elevation data sources are accessible.")
 
     with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
         out = tmp.name
