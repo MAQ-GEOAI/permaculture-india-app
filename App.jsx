@@ -1202,14 +1202,15 @@ const App = () => {
       } else if (contoursRes.status === 'fulfilled' && !contoursRes.value.ok) {
         const errorText = await contoursRes.value.text().catch(() => 'Unknown error');
         logWarn('Contours request failed:', contoursRes.value.status, errorText);
-        showToast(`Contours unavailable (${contoursRes.value.status}). Trying fallback...`, 'info');
+        showToast(`Cannot generate real contours: ${errorText}. Please check backend and DEM data sources.`, 'error');
         
-        // Try fallback visualization
-        generateFallbackContours();
+        // DO NOT use fallback - show error instead
+        // Fallback creates fake uniform contours that don't represent real terrain
       } else {
         logWarn('Contours request error:', contoursRes.reason);
-        showToast('Contours analysis unavailable. Using fallback visualization.', 'info');
-        generateFallbackContours();
+        showToast('Cannot generate real contours: Backend unavailable. Please ensure backend is running and has access to elevation data.', 'error');
+        
+        // DO NOT use fallback - show error instead
       }
       
       // Process hydrology
