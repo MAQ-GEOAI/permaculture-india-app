@@ -156,8 +156,13 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
         except Exception as e:
             continue
     
-    # If all sources fail, return None (caller will handle)
-    return None
+    # If all sources fail, try OpenElevation API as last resort
+    print(f"[UTILS] All DEM tile sources failed for {tile_lat}_{tile_lon}, trying OpenElevation API...")
+    try:
+        return create_dem_from_elevation_api(tile_lat, tile_lon)
+    except Exception as e:
+        print(f"[UTILS] OpenElevation API also failed: {e}")
+        return None
 
 def merge_dem_tiles(tile_paths, bbox):
     """Merge multiple DEM tiles into one"""
