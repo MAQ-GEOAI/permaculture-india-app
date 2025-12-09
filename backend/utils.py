@@ -171,6 +171,112 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
         print(f"[UTILS] OpenElevation API also failed: {e}")
         return None
 
+def create_dem_from_elevation_api(tile_lat, tile_lon, resolution=30):
+    """
+    Create DEM from OpenElevation API when tile sources fail
+    Samples elevation points and creates a GeoTIFF
+    """
+    from rasterio.transform import from_bounds
+    
+    # Create a 1-degree tile (approximately 111km)
+    minx = float(tile_lon)
+    miny = float(tile_lat)
+    maxx = minx + 1.0
+    maxy = miny + 1.0
+    
+    # Sample grid - for better resolution, sample every ~0.0005 degrees (~50m)
+    step = 0.0005
+    lats = np.linspace(miny, maxy, 100)
+    lons = np.linspace(minx, maxx, 100)
+    
+    # Prepare batch request
+    locations = []
+    grid_indices = []
+    for i, lat in enumerate(lats):
+        for j, lon in enumerate(lons):
+            locations.append({"latitude": float(lat), "longitude": float(lon)})
+            grid_indices.append((len(lats) - 1 - i, j))
+    
+    # Request elevations in batches (API limit ~1000 points)
+    elevation_grid = np.full((len(lats), len(lons)), np.nan, dtype=np.float32)
+    batch_size = 100
+    
+    for i in range(0, len(locations), batch_size):
+        batch = locations[i:i+batch_size]
+        try:
+            response = requests.post(
+                "https://api.open-elevation.com/api/v1/lookup",
+                json={"locations": batch},
+                timeout=30
+            )
+            if response.status_code == 200:
+                results = response.json().get('results', [])
+                for idx, result in enumerate(results):
+                    if idx < len(batch) and i + idx < len(grid_indices):
+                        elev = result.get('elevation')
+                        if elev is not None and elev != -32768:
+                            grid_idx = grid_indices[i + idx]
+                            elevation_grid[grid_idx] = float(elev)
+        except Exception as e:
+            print(f"[UTILS] Batch elevation request failed: {e}")
+            continue
+    
+    # Check if we got valid data
+    valid_data = elevation_grid[~np.isnan(elevation_grid)]
+    if len(valid_data) == 0:
+        raise Exception("No valid elevation data from API")
+    
+    # Check variation
+    data_std = np.std(valid_data)
+    data_range = np.max(valid_data) - np.min(valid_data)
+    if data_std < 0.5 or data_range < 1.0:
+        raise Exception(f"API elevation data is uniform (std={data_std:.2f}m, range={data_range:.2f}m)")
+    
+    # Fill NaN with interpolation
+    if SCIPY_AVAILABLE:
+        try:
+            mask = ~np.isnan(elevation_grid)
+            if np.any(mask):
+                elevation_grid = ndimage.generic_filter(
+                    elevation_grid,
+                    lambda x: x[~np.isnan(x)][0] if np.any(~np.isnan(x)) else np.nan,
+                    size=3,
+                    mode='nearest'
+                )
+                if np.any(np.isnan(elevation_grid)):
+                    mean_elev = np.nanmean(elevation_grid)
+                    elevation_grid[np.isnan(elevation_grid)] = mean_elev
+        except:
+            mean_elev = np.nanmean(elevation_grid)
+            elevation_grid[np.isnan(elevation_grid)] = mean_elev
+    else:
+        mean_elev = np.nanmean(elevation_grid)
+        elevation_grid[np.isnan(elevation_grid)] = mean_elev
+    
+    # Create GeoTIFF
+    transform = from_bounds(minx, miny, maxx, maxy, len(lons), len(lats))
+    temp_file = tempfile.NamedTemporaryFile(suffix='.tif', delete=False)
+    temp_path = temp_file.name
+    temp_file.close()
+    
+    with rasterio.open(
+        temp_path,
+        'w',
+        driver='GTiff',
+        height=len(lats),
+        width=len(lons),
+        count=1,
+        dtype=elevation_grid.dtype,
+        crs='EPSG:4326',
+        transform=transform,
+        compress='lzw',
+        nodata=np.nan
+    ) as dst:
+        dst.write(elevation_grid, 1)
+    
+    print(f"[UTILS] Created DEM from API: {len(valid_data)} points, range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m, std={data_std:.2f}m")
+    return temp_path
+
 def merge_dem_tiles(tile_paths, bbox):
     """Merge multiple DEM tiles into one"""
     minx, miny, maxx, maxy = bbox
