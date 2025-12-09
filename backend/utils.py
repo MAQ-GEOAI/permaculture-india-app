@@ -9,6 +9,13 @@ import math
 import numpy as np
 from io import BytesIO
 import zipfile
+import tempfile
+try:
+    from scipy import ndimage
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
+    print("[UTILS] Warning: scipy not available, using simple interpolation")
 
 DEM_FOLDER = "data/dem_tiles"
 os.makedirs(DEM_FOLDER, exist_ok=True)
