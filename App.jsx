@@ -1179,39 +1179,78 @@ const App = () => {
     }
     
     try {
-      // Run all analyses in parallel with user-selected contour interval
-      const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
-      const [contoursRes, hydrologyRes] = await Promise.allSettled([
-        fetch(contourUrl),
-        fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`)
-      ]);
-      
-      // Process contours
-      if (contoursRes.status === 'fulfilled' && contoursRes.value.ok) {
-        const contoursData = await contoursRes.value.json();
-        setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
+      // NEW APPROACH: Use OpenTopoMap contour tile overlay instead of generating from DEM
+      // This provides pre-generated, real terrain contours
+      if (!layerRefs.current.contourTiles) {
+        // Add OpenTopoMap contour overlay (pre-generated contours)
+        const contourTileLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+          attribution: '© OpenTopoMap (CC-BY-SA)',
+          maxZoom: 17,
+          opacity: 0.7
+        });
         
-        // Auto-enable contours layer
-        setLayerVisibility(prev => ({ ...prev, contours: true }));
+        // Note: OpenTopoMap shows contours on the map tiles themselves
+        // For vector contours, we'll use a different approach
         
-        // Render with specialized contour rendering (handles labels and bold contours)
-        renderContours(contoursData, true);
+        // Alternative: Use Overpass API to get contour data from OpenStreetMap
+        // Or use a dedicated contour tile service
         
-        const count = contoursData.features?.length || 0;
-        showToast(`Contours generated: ${count} lines (${contourInterval}m interval)`, 'success');
-      } else if (contoursRes.status === 'fulfilled' && !contoursRes.value.ok) {
-        const errorText = await contoursRes.value.text().catch(() => 'Unknown error');
-        logWarn('Contours request failed:', contoursRes.value.status, errorText);
-        showToast(`Cannot generate real contours: ${errorText}. Please check backend and DEM data sources.`, 'error');
+        // For now, try backend first, then show tile-based option
+        const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
+        const [contoursRes, hydrologyRes] = await Promise.allSettled([
+          fetch(contourUrl),
+          fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`)
+        ]);
         
-        // DO NOT use fallback - show error instead
-        // Fallback creates fake uniform contours that don't represent real terrain
+        // Process contours
+        if (contoursRes.status === 'fulfilled' && contoursRes.value.ok) {
+          const contoursData = await contoursRes.value.json();
+          
+          // Validate contours are not uniform (check if they vary)
+          const features = contoursData.features || [];
+          if (features.length > 0) {
+            // Check if contours have variation (not all same shape)
+            const firstCoords = features[0]?.geometry?.coordinates?.[0] || [];
+            const isUniform = features.every(f => {
+              const coords = f.geometry?.coordinates?.[0] || [];
+              return coords.length === firstCoords.length;
+            });
+            
+            if (isUniform && features.length > 5) {
+              // Likely uniform contours - use tile-based instead
+              showToast('Generated contours appear uniform. Using pre-generated contour layer instead.', 'info');
+              addContourTileOverlay();
+            } else {
+              // Real contours - use them
+              setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
+              setLayerVisibility(prev => ({ ...prev, contours: true }));
+              renderContours(contoursData, true);
+              const count = features.length;
+              showToast(`Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
+            }
+          } else {
+            showToast('No contours generated. Using pre-generated contour layer.', 'info');
+            addContourTileOverlay();
+          }
+        } else {
+          // Backend failed - use tile-based contour overlay
+          logWarn('Backend contours unavailable, using tile-based contour overlay');
+          showToast('Using pre-generated contour layer (OpenTopoMap)', 'info');
+          addContourTileOverlay();
+        }
       } else {
-        logWarn('Contours request error:', contoursRes.reason);
-        showToast('Cannot generate real contours: Backend unavailable. Please ensure backend is running and has access to elevation data.', 'error');
-        
-        // DO NOT use fallback - show error instead
+        // Contour tiles already added, just toggle visibility
+        if (layerRefs.current.contourTiles) {
+          if (layerVisibility.contours) {
+            mapInstanceRef.current.addLayer(layerRefs.current.contourTiles);
+          } else {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+          }
+        }
       }
+      
+      // Process hydrology (unchanged)
+      if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) {
       
       // Process hydrology
       if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) {
