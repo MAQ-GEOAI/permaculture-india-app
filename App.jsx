@@ -1783,6 +1783,30 @@ const App = () => {
     return L.layerGroup(arrows);
   };
   
+  // Add pre-generated contour tile overlay (OpenTopoMap style)
+  const addContourTileOverlay = useCallback(() => {
+    if (!mapInstanceRef.current) return;
+    
+    // Remove existing contour tiles if any
+    if (layerRefs.current.contourTiles) {
+      mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+    }
+    
+    // Add OpenTopoMap as overlay - it includes contour lines in the tiles
+    // This provides pre-generated, real terrain contours
+    const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+      attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
+      maxZoom: 17,
+      opacity: 0.6,
+      pane: 'overlayPane' // Render above basemap
+    });
+    
+    contourTiles.addTo(mapInstanceRef.current);
+    layerRefs.current.contourTiles = contourTiles;
+    setLayerVisibility(prev => ({ ...prev, contours: true }));
+    showToast('Pre-generated contour layer added (OpenTopoMap)', 'success');
+  }, [showToast]);
+  
   // Helper to create wind area
   const createWindArea = (lat, lng, startAngle, endAngle, radius, color, opacity) => {
     if (!mapInstanceRef.current) return null;
