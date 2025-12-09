@@ -83,6 +83,7 @@ const App = () => {
   // Layer references for map rendering
   const layerRefs = useRef({
     contours: null,
+    contourTiles: null, // Pre-generated contour tile overlay
     catchments: null,
     flowAccumulation: null,
     naturalPonds: null,
