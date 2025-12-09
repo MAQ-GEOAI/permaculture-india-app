@@ -1182,71 +1182,73 @@ const App = () => {
     try {
       // NEW APPROACH: Use OpenTopoMap contour tile overlay instead of generating from DEM
       // This provides pre-generated, real terrain contours
-      if (!layerRefs.current.contourTiles) {
-        // Add OpenTopoMap contour overlay (pre-generated contours)
-        const contourTileLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-          attribution: '© OpenTopoMap (CC-BY-SA)',
-          maxZoom: 17,
-          opacity: 0.7
-        });
+      const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
+      const [contoursRes, hydrologyRes] = await Promise.allSettled([
+        fetch(contourUrl),
+        fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`)
+      ]);
+      
+      // Process contours
+      if (contoursRes.status === 'fulfilled' && contoursRes.value.ok) {
+        const contoursData = await contoursRes.value.json();
         
-        // Note: OpenTopoMap shows contours on the map tiles themselves
-        // For vector contours, we'll use a different approach
-        
-        // Alternative: Use Overpass API to get contour data from OpenStreetMap
-        // Or use a dedicated contour tile service
-        
-        // For now, try backend first, then show tile-based option
-        const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
-        const [contoursRes, hydrologyRes] = await Promise.allSettled([
-          fetch(contourUrl),
-          fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`)
-        ]);
-        
-        // Process contours
-        if (contoursRes.status === 'fulfilled' && contoursRes.value.ok) {
-          const contoursData = await contoursRes.value.json();
+        // Validate contours are not uniform (check if they vary)
+        const features = contoursData.features || [];
+        if (features.length > 0) {
+          // Check if contours have variation (not all same shape)
+          const firstCoords = features[0]?.geometry?.coordinates?.[0] || [];
+          const isUniform = features.every(f => {
+            const coords = f.geometry?.coordinates?.[0] || [];
+            return coords.length === firstCoords.length;
+          });
           
-          // Validate contours are not uniform (check if they vary)
-          const features = contoursData.features || [];
-          if (features.length > 0) {
-            // Check if contours have variation (not all same shape)
-            const firstCoords = features[0]?.geometry?.coordinates?.[0] || [];
-            const isUniform = features.every(f => {
-              const coords = f.geometry?.coordinates?.[0] || [];
-              return coords.length === firstCoords.length;
-            });
-            
-            if (isUniform && features.length > 5) {
-              // Likely uniform contours - use tile-based instead
-              showToast('Generated contours appear uniform. Using pre-generated contour layer instead.', 'info');
-              addContourTileOverlay();
-            } else {
-              // Real contours - use them
-              setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
+          if (isUniform && features.length > 5) {
+            // Likely uniform contours - use tile-based instead
+            showToast('Generated contours appear uniform. Using pre-generated contour layer instead.', 'info');
+            if (!layerRefs.current.contourTiles && mapInstanceRef.current) {
+              const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+                attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
+                maxZoom: 17,
+                opacity: 0.6
+              });
+              contourTiles.addTo(mapInstanceRef.current);
+              layerRefs.current.contourTiles = contourTiles;
               setLayerVisibility(prev => ({ ...prev, contours: true }));
-              renderContours(contoursData, true);
-              const count = features.length;
-              showToast(`Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
             }
           } else {
-            showToast('No contours generated. Using pre-generated contour layer.', 'info');
-            addContourTileOverlay();
+            // Real contours - use them
+            setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
+            setLayerVisibility(prev => ({ ...prev, contours: true }));
+            renderContours(contoursData, true);
+            const count = features.length;
+            showToast(`Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
           }
         } else {
-          // Backend failed - use tile-based contour overlay
-          logWarn('Backend contours unavailable, using tile-based contour overlay');
-          showToast('Using pre-generated contour layer (OpenTopoMap)', 'info');
-          addContourTileOverlay();
+          showToast('No contours generated. Using pre-generated contour layer.', 'info');
+          if (!layerRefs.current.contourTiles && mapInstanceRef.current) {
+            const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+              attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
+              maxZoom: 17,
+              opacity: 0.6
+            });
+            contourTiles.addTo(mapInstanceRef.current);
+            layerRefs.current.contourTiles = contourTiles;
+            setLayerVisibility(prev => ({ ...prev, contours: true }));
+          }
         }
       } else {
-        // Contour tiles already added, just toggle visibility
-        if (layerRefs.current.contourTiles) {
-          if (layerVisibility.contours) {
-            mapInstanceRef.current.addLayer(layerRefs.current.contourTiles);
-          } else {
-            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-          }
+        // Backend failed - use tile-based contour overlay
+        logWarn('Backend contours unavailable, using tile-based contour overlay');
+        showToast('Using pre-generated contour layer (OpenTopoMap)', 'info');
+        if (!layerRefs.current.contourTiles && mapInstanceRef.current) {
+          const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
+            maxZoom: 17,
+            opacity: 0.6
+          });
+          contourTiles.addTo(mapInstanceRef.current);
+          layerRefs.current.contourTiles = contourTiles;
+          setLayerVisibility(prev => ({ ...prev, contours: true }));
         }
       }
       
