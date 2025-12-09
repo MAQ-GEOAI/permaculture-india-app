@@ -1466,13 +1466,15 @@ const App = () => {
       } else {
         // No results from backend - create fallback
         log('No backend results, creating fallback visualizations...');
-        createFallbackVisualizations();
+        // DO NOT use fallback - show error instead
+        // Fallback creates fake data that doesn't represent real terrain
       }
     } catch (error) {
       // Handle backend connection errors gracefully
       if (error.message?.includes('Failed to fetch') || error.message?.includes('ERR_CONNECTION_REFUSED')) {
         showToast('Backend server not running. Creating sample visualizations...', 'info');
-        createFallbackVisualizations();
+        // DO NOT use fallback - show error instead
+        // Fallback creates fake data that doesn't represent real terrain
       } else {
         console.error('Analysis error:', error);
         showToast('Analysis failed: ' + (error.message || 'Unknown error'), 'error');
@@ -1773,46 +1775,9 @@ const App = () => {
   // We only generate real terrain-based contours from DEM data
   // If backend fails, show error instead of fake data
   
-  // Create fallback visualizations when backend is unavailable
-  const createFallbackVisualizations = () => {
-    if (!aoi || !mapInstanceRef.current) {
-      logWarn('Cannot create fallback: no AOI or map');
-      return;
-    }
-    
-    const coords = aoi.geometry.coordinates[0];
-    const centerLng = coords.reduce((sum, c) => sum + c[0], 0) / coords.length;
-    const centerLat = coords.reduce((sum, c) => sum + c[1], 0) / coords.length;
-    
-    // Create realistic sample contours based on AOI shape
-    const bbox = getBboxString(aoi);
-    const [minLng, minLat, maxLng, maxLat] = bbox.split(',').map(Number);
-    const lngRange = maxLng - minLng;
-    const latRange = maxLat - minLat;
-    
-    const sampleContours = {
-      type: 'FeatureCollection',
-      features: Array.from({ length: 10 }, (_, i) => {
-        const elevation = 100 + i * 5;
-        const offset = (i - 5) * 0.0003;
-        // Create contour lines that follow AOI shape
-        const contourCoords = coords.map(([lng, lat]) => [
-          lng + offset * (lngRange / 0.01),
-          lat + offset * (latRange / 0.01)
-        ]);
-        // Close the polygon
-        contourCoords.push(contourCoords[0]);
-        
-        return {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: contourCoords
-          },
-          properties: { elevation, name: `${elevation}m contour` }
-        };
-      })
-    };
+  // REMOVED: createFallbackVisualizations() - was creating fake uniform contours
+  // We only generate real terrain-based contours from DEM data
+  // If backend fails, show error instead of fake data
     
     // Create sample flow paths (multiple streams)
     const sampleFlow = {

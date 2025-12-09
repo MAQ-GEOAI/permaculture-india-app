@@ -7,5 +7,3 @@ whitebox
 pysolar
 openai
 python-dotenv
-scipy
-requests
