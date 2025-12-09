@@ -65,25 +65,7 @@ def generate_contours(bbox, interval=5, bold_interval=None):
     except Exception as e:
         dem_error = str(e)
         log(f"DEM download/validation failed: {dem_error}")
-        
-        # Try elevation API as fallback for real terrain data
-        try:
-            from elevation_api import create_dem_from_api
-            log("Attempting to use OpenElevation API for real terrain data...")
-            dem_path = create_dem_from_api(dem_bbox, resolution=30)
-            
-            # Validate API-generated DEM too
-            with rasterio.open(dem_path) as src:
-                data = src.read(1)
-                valid_data = data[~np.isnan(data)]
-                if len(valid_data) > 0:
-                    data_std = np.std(valid_data)
-                    data_range = np.max(valid_data) - np.min(valid_data)
-                    if data_std < 0.5:
-                        raise Exception(f"API elevation data is uniform (std={data_std:.2f}m) - may not be accurate")
-                    log(f"API DEM validated: elevation range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m")
-        except Exception as api_error:
-            raise Exception(f"Cannot generate real terrain contours. DEM failed: {dem_error}. API failed: {str(api_error)}. Please ensure elevation data sources are accessible.")
+        raise Exception(f"Cannot generate real terrain contours. DEM validation failed: {dem_error}. Please ensure elevation data sources are accessible and contain real terrain variation.")
 
     with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
         out = tmp.name

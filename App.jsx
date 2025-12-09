@@ -1769,53 +1769,9 @@ const App = () => {
     return L.layerGroup([polygon]);
   };
   
-  // Generate fallback contours when backend is unavailable
-  const generateFallbackContours = () => {
-    if (!aoi || !mapInstanceRef.current) {
-      logWarn('Cannot create fallback contours: no AOI or map');
-      return;
-    }
-    
-    const coords = aoi.geometry.coordinates[0];
-    const bbox = getBboxString(aoi);
-    const [minLng, minLat, maxLng, maxLat] = bbox.split(',').map(Number);
-    const lngRange = maxLng - minLng;
-    const latRange = maxLat - minLat;
-    
-    // Create realistic sample contours
-    const sampleContours = {
-      type: 'FeatureCollection',
-      features: Array.from({ length: 10 }, (_, i) => {
-        const elevation = 100 + i * contourInterval;
-        const offset = (i - 5) * 0.0003;
-        const contourCoords = coords.map(([lng, lat]) => [
-          lng + offset * (lngRange / 0.01),
-          lat + offset * (latRange / 0.01)
-        ]);
-        contourCoords.push(contourCoords[0]);
-        
-        return {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: contourCoords
-          },
-          properties: {
-            elevation: elevation,
-            name: `${elevation}m`,
-            bold: i % contourBoldInterval === 0,
-            weight: i % contourBoldInterval === 0 ? 2 : 1,
-            color: '#3b82f6'
-          }
-        };
-      })
-    };
-    
-    setAnalysisLayers(prev => ({ ...prev, contours: sampleContours }));
-    setLayerVisibility(prev => ({ ...prev, contours: true }));
-    renderContours(sampleContours, true);
-    showToast('Using fallback contours (backend unavailable)', 'info');
-  };
+  // REMOVED: generateFallbackContours() - was creating fake uniform contours
+  // We only generate real terrain-based contours from DEM data
+  // If backend fails, show error instead of fake data
   
   // Create fallback visualizations when backend is unavailable
   const createFallbackVisualizations = () => {

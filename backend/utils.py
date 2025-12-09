@@ -51,14 +51,8 @@ def download_dem(lat, lon, bbox=None):
                 if tile_path and os.path.exists(tile_path):
                     tiles.append(tile_path)
         
-        # If no tiles downloaded, try elevation API as fallback
         if not tiles:
-            try:
-                from elevation_api import create_dem_from_api
-                print("[UTILS] No DEM tiles available, using OpenElevation API...")
-                return create_dem_from_api(bbox, resolution=30)
-            except Exception as e:
-                raise Exception(f"Failed to download DEM tiles and elevation API failed: {str(e)}")
+            raise Exception("Failed to download any DEM tiles")
         
         # Merge tiles if multiple
         if len(tiles) == 1:
@@ -67,20 +61,7 @@ def download_dem(lat, lon, bbox=None):
             return merge_dem_tiles(tiles, bbox)
     
     # Single tile download
-    tile_path = download_single_dem_tile(int(lat), int(lon), is_india)
-    
-    # If single tile fails, try elevation API for small area
-    if not tile_path:
-        try:
-            from elevation_api import create_dem_from_api
-            # Create small bbox around point
-            buffer = 0.01  # ~1km
-            bbox = (lon - buffer, lat - buffer, lon + buffer, lat + buffer)
-            return create_dem_from_api(bbox, resolution=30)
-        except:
-            raise Exception(f"Failed to download DEM tile for lat={lat}, lon={lon}")
-    
-    return tile_path
+    return download_single_dem_tile(int(lat), int(lon), is_india)
 
 def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     """Download a single DEM tile with improved sources"""
@@ -141,14 +122,33 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
                 with open(path, "wb") as f:
                     f.write(r.content)
                 
-                # Verify it's a valid GeoTIFF
+                # Verify it's a valid GeoTIFF with real terrain data
                 try:
                     with rasterio.open(path) as src:
                         if src.count > 0 and src.width > 0 and src.height > 0:
                             # Check if data is valid (not all zeros or nodata)
                             data = src.read(1)
-                            if np.any(data != src.nodata) and np.any(data != 0):
-                                return path
+                            valid_data = data[(data != src.nodata) & (data != 0) & ~np.isnan(data)]
+                            
+                            if len(valid_data) == 0:
+                                # No valid data
+                                if os.path.exists(path):
+                                    os.remove(path)
+                                continue
+                            
+                            # CRITICAL: Check if data actually varies (not uniform)
+                            data_std = np.std(valid_data)
+                            data_range = np.max(valid_data) - np.min(valid_data)
+                            
+                            # Require at least 1m variation and 0.5m standard deviation
+                            if data_std < 0.5 or data_range < 1.0:
+                                # Uniform/invalid data - reject
+                                if os.path.exists(path):
+                                    os.remove(path)
+                                continue
+                            
+                            # Valid DEM with real terrain variation
+                            return path
                 except Exception as e:
                     if os.path.exists(path):
                         os.remove(path)
