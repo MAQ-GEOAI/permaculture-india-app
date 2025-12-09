@@ -1497,8 +1497,8 @@ const App = () => {
       
       // Check if we got any results
       let hasResults = false;
-      if (contoursRes.status === 'fulfilled' && contoursRes.value.ok) hasResults = true;
-      if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) hasResults = true;
+      if (contoursRes && contoursRes.status === 'fulfilled' && contoursRes.value.ok) hasResults = true;
+      if (hydrologyRes && hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) hasResults = true;
       
       if (hasResults) {
         showToast('Analysis complete! All layers are visible on the map.', 'success');
