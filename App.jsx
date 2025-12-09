@@ -1250,9 +1250,6 @@ const App = () => {
         }
       }
       
-      // Process hydrology (unchanged)
-      if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) {
-      
       // Process hydrology
       if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) {
         const hydrologyData = await hydrologyRes.value.json();
