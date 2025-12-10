@@ -178,7 +178,7 @@ const App = () => {
   // Layer Visibility Toggles
   const [layerVisibility, setLayerVisibility] = useState({
     basemap: 'satellite',
-    contours: false,
+    contours: true, // Default to true so contours are visible by default
     catchments: false,
     flowAccumulation: false,
     naturalPonds: false,
@@ -3180,7 +3180,7 @@ const App = () => {
                       type="checkbox"
                       checked={layerVisibility.contours || false}
                       onChange={() => toggleLayer('contours')}
-                      disabled={!analysisLayers.contours}
+                      disabled={!analysisLayers.contours && !layerRefs.current.contourTiles}
                       className="w-4 h-4 text-emerald-600 bg-slate-700 border-slate-600 rounded focus:ring-emerald-500 disabled:opacity-50"
                     />
                     Contours
