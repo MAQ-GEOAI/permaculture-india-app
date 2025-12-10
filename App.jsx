@@ -1273,33 +1273,33 @@ const App = () => {
           layerRefs.current.contourTiles = null;
         }
         
-        // Add OpenTopoMap tiles as overlay (includes contour lines)
+        // Add contour lines as overlay layer on satellite imagery (keeps satellite basemap)
         if (mapInstanceRef.current) {
-          // Switch basemap to OpenTopoMap for better contour visibility
-          // OpenTopoMap shows brown contour lines clearly on its topographic map
-          if (basemapLayerRef.current) {
+          // Remove existing contour overlay if any
+          if (layerRefs.current.contourTiles) {
             try {
-              mapInstanceRef.current.removeLayer(basemapLayerRef.current);
+              if (mapInstanceRef.current.hasLayer(layerRefs.current.contourTiles)) {
+                mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+              }
             } catch (e) {
-              logWarn('Error removing basemap:', e);
+              logWarn('Error removing existing contour overlay:', e);
             }
+            layerRefs.current.contourTiles = null;
           }
           
-          // Add OpenTopoMap as the basemap (better for seeing contours)
-          const topoBasemap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenTopoMap (CC-BY-SA) - Topographic map with contour lines',
+          // Add OpenTopoMap as semi-transparent overlay (shows contour lines over satellite)
+          // This keeps the satellite basemap visible while adding brown contour lines on top
+          const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenTopoMap (CC-BY-SA) - Contour lines overlay',
             maxZoom: 17,
-            subdomains: ['a', 'b', 'c']
+            subdomains: ['a', 'b', 'c'],
+            opacity: 0.6, // Semi-transparent - satellite shows through, contour lines visible
+            pane: 'overlayPane', // Render above basemap
+            zIndex: 400 // Ensure it's above other layers
           });
           
-          topoBasemap.addTo(mapInstanceRef.current);
-          basemapLayerRef.current = topoBasemap;
-          
-          // Update basemap state to terrain (OpenTopoMap)
-          setLayerVisibility(prev => ({ ...prev, basemap: 'terrain' }));
-          
-          // Store reference for contour layer toggle
-          layerRefs.current.contourTiles = topoBasemap;
+          contourOverlay.addTo(mapInstanceRef.current);
+          layerRefs.current.contourTiles = contourOverlay;
           
           // Ensure contours layer is visible
           setLayerVisibility(prev => ({ ...prev, contours: true }));
@@ -1307,12 +1307,12 @@ const App = () => {
           // Force map to refresh
           mapInstanceRef.current.invalidateSize();
           
-          log('OpenTopoMap basemap activated - contour lines should be clearly visible as brown lines');
-          console.log('Contour fallback: Switched to OpenTopoMap basemap - look for brown contour lines');
-          console.log('TIP: On OpenTopoMap, contour lines appear as brown/orange lines showing elevation changes');
-          showToast('Switched to topographic map - brown/orange lines are contour lines showing elevation', 'success');
+          log('Contour overlay added on satellite basemap - brown lines are contour lines');
+          console.log('Contour fallback: OpenTopoMap overlay added - satellite basemap preserved');
+          console.log('Brown/orange lines on the overlay are contour lines showing elevation');
+          showToast('Contour layer overlay added on satellite imagery', 'success');
         } else {
-          logError('Cannot add contour tiles: map instance not available');
+          logError('Cannot add contour overlay: map instance not available');
         }
       }
       
