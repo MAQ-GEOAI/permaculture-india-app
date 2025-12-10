@@ -1257,27 +1257,46 @@ const App = () => {
         }
       } else {
         // Backend failed - use tile-based contour overlay immediately
-        logWarn('Backend contours unavailable, using tile-based contour overlay');
-        showToast('Backend unavailable. Using pre-generated contour layer (OpenTopoMap)', 'info');
+        const errorReason = contoursRes.status === 'rejected' 
+          ? 'Network/CORS error' 
+          : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
+        logWarn(`Backend contours unavailable (${errorReason}), using tile-based contour overlay`);
+        showToast('Backend unavailable. Using topographic map with contour lines (OpenTopoMap)', 'info');
         
         // Remove existing contour tiles if any
         if (layerRefs.current.contourTiles && mapInstanceRef.current) {
-          mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+          try {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+          } catch (e) {
+            logWarn('Error removing existing contour tiles:', e);
+          }
           layerRefs.current.contourTiles = null;
         }
         
         // Add OpenTopoMap tiles as overlay (includes contour lines)
         if (mapInstanceRef.current) {
           const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
+            attribution: '© OpenTopoMap (CC-BY-SA) - Topographic map with contour lines',
             maxZoom: 17,
-            opacity: 0.8, // Increased opacity for better visibility
-            pane: 'overlayPane' // Render above basemap
+            opacity: 0.85, // High opacity for better visibility
+            pane: 'overlayPane', // Render above basemap
+            zIndex: 400 // Ensure it's above other layers
           });
+          
+          // Add tiles to map
           contourTiles.addTo(mapInstanceRef.current);
           layerRefs.current.contourTiles = contourTiles;
+          
+          // Ensure contours layer is visible
           setLayerVisibility(prev => ({ ...prev, contours: true }));
-          log('OpenTopoMap contour tiles added as fallback');
+          
+          // Force map to refresh
+          mapInstanceRef.current.invalidateSize();
+          
+          log('OpenTopoMap contour tiles added as fallback - tiles should be visible now');
+          console.log('Contour fallback activated - OpenTopoMap tiles added with opacity 0.85');
+        } else {
+          logError('Cannot add contour tiles: map instance not available');
         }
       }
       
