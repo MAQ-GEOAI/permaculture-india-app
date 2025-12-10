@@ -1117,9 +1117,26 @@ const App = () => {
     if (!mapInstanceRef.current) return;
     
     const map = mapInstanceRef.current;
+    const contoursVisible = layerVisibility.contours === true;
     
-    // Toggle layer visibility based on state
+    // Handle contourTiles separately - it's controlled by the contours checkbox
+    // but doesn't have its own visibility key (layerVisibility.contourTiles doesn't exist)
+    const contourTilesLayer = layerRefs.current.contourTiles;
+    if (contourTilesLayer) {
+      const tilesOnMap = map.hasLayer(contourTilesLayer);
+      if (contoursVisible && !tilesOnMap) {
+        contourTilesLayer.addTo(map);
+        log('Contour tiles ON');
+      } else if (!contoursVisible && tilesOnMap) {
+        map.removeLayer(contourTilesLayer);
+        log('Contour tiles OFF');
+      }
+    }
+    
+    // Toggle other layers - skip contourTiles (handled above)
     Object.keys(layerRefs.current).forEach((layerKey) => {
+      if (layerKey === 'contourTiles') return; // Skip - handled separately above
+      
       const layer = layerRefs.current[layerKey];
       if (layer) {
         try {
@@ -1130,7 +1147,7 @@ const App = () => {
             layer.addTo(map);
             log(`Layer ${layerKey} toggled ON`);
             
-            // Special handling for contours: show/hide labels
+            // Show contour labels if enabled
             if (layerKey === 'contours' && contourShowLabels) {
               labelMarkersRef.current.forEach(marker => {
                 if (marker && !map.hasLayer(marker)) {
@@ -1138,40 +1155,21 @@ const App = () => {
                 }
               });
             }
-            
-            // Special handling for contour overlay tiles (fallback)
-            if (layerKey === 'contours' && layerRefs.current.contourTiles) {
-              if (!map.hasLayer(layerRefs.current.contourTiles)) {
-                layerRefs.current.contourTiles.addTo(map);
-                log('Contour overlay tiles toggled ON');
-              }
-            }
           } else if (!isVisible && isOnMap) {
             map.removeLayer(layer);
             log(`Layer ${layerKey} toggled OFF`);
             
-            // Special handling for contours: hide labels
+            // Hide contour labels
             if (layerKey === 'contours') {
               labelMarkersRef.current.forEach(marker => {
                 if (marker && map.hasLayer(marker)) {
                   map.removeLayer(marker);
                 }
               });
-              
-              // Also hide contour overlay tiles (fallback)
-              if (layerRefs.current.contourTiles && map.hasLayer(layerRefs.current.contourTiles)) {
-                map.removeLayer(layerRefs.current.contourTiles);
-                log('Contour overlay tiles toggled OFF');
-              }
             }
           }
         } catch (e) {
           logError(`Error toggling layer ${layerKey}:`, e);
-        }
-      } else {
-        // Layer not yet created
-        if (layerVisibility[layerKey]) {
-          log(`Layer ${layerKey} requested but not yet rendered`);
         }
       }
     });
