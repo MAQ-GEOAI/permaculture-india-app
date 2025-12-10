@@ -1118,22 +1118,6 @@ const App = () => {
     
     const map = mapInstanceRef.current;
     
-    // Special handling for contourTiles when contours layer is null (tiles-only fallback)
-    // This must be checked separately because contourTiles exists even when contours is null
-    const contourTilesLayer = layerRefs.current.contourTiles;
-    const contoursVisible = layerVisibility.contours === true;
-    
-    if (contourTilesLayer) {
-      const tilesOnMap = map.hasLayer(contourTilesLayer);
-      if (contoursVisible && !tilesOnMap) {
-        contourTilesLayer.addTo(map);
-        log('Contour overlay tiles toggled ON (tiles-only fallback)');
-      } else if (!contoursVisible && tilesOnMap) {
-        map.removeLayer(contourTilesLayer);
-        log('Contour overlay tiles toggled OFF (tiles-only fallback)');
-      }
-    }
-    
     // Toggle layer visibility based on state
     Object.keys(layerRefs.current).forEach((layerKey) => {
       const layer = layerRefs.current[layerKey];
@@ -1155,7 +1139,7 @@ const App = () => {
               });
             }
             
-            // Special handling for contour overlay tiles (when contours GeoJSON exists)
+            // Special handling for contour overlay tiles (fallback)
             if (layerKey === 'contours' && layerRefs.current.contourTiles) {
               if (!map.hasLayer(layerRefs.current.contourTiles)) {
                 layerRefs.current.contourTiles.addTo(map);
@@ -4097,6 +4081,5 @@ const App = () => {
 };
 
 export default App;
-
 
 
