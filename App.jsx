@@ -1782,30 +1782,6 @@ const App = () => {
     return L.layerGroup(arrows);
   };
   
-  // Add pre-generated contour tile overlay (OpenTopoMap style)
-  const addContourTileOverlay = useCallback(() => {
-    if (!mapInstanceRef.current) return;
-    
-    // Remove existing contour tiles if any
-    if (layerRefs.current.contourTiles) {
-      mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-    }
-    
-    // Add OpenTopoMap as overlay - it includes contour lines in the tiles
-    // This provides pre-generated, real terrain contours
-    const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
-      maxZoom: 17,
-      opacity: 0.6,
-      pane: 'overlayPane' // Render above basemap
-    });
-    
-    contourTiles.addTo(mapInstanceRef.current);
-    layerRefs.current.contourTiles = contourTiles;
-    setLayerVisibility(prev => ({ ...prev, contours: true }));
-    showToast('Pre-generated contour layer added (OpenTopoMap)', 'success');
-  }, [showToast]);
-  
   // Helper to create wind area
   const createWindArea = (lat, lng, startAngle, endAngle, radius, color, opacity) => {
     if (!mapInstanceRef.current) return null;
@@ -1841,165 +1817,8 @@ const App = () => {
   // REMOVED: createFallbackVisualizations() - was creating fake uniform contours
   // We only generate real terrain-based contours from DEM data
   // If backend fails, show error instead of fake data
-    
-    // Create sample flow paths (multiple streams)
-    const sampleFlow = {
-      type: 'FeatureCollection',
-      features: [
-        {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [centerLng - lngRange * 0.3, centerLat - latRange * 0.3],
-              [centerLng - lngRange * 0.15, centerLat - latRange * 0.15],
-              [centerLng, centerLat],
-              [centerLng + lngRange * 0.15, centerLat + latRange * 0.15],
-              [centerLng + lngRange * 0.3, centerLat + latRange * 0.3]
-            ]
-          },
-          properties: { flow: 8, type: 'flow', name: 'Main water flow' }
-        },
-        {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: [
-              [centerLng - lngRange * 0.2, centerLat + latRange * 0.2],
-              [centerLng, centerLat],
-              [centerLng + lngRange * 0.2, centerLat - latRange * 0.2]
-            ]
-          },
-          properties: { flow: 5, type: 'flow', name: 'Secondary flow' }
-        }
-      ]
-    };
-    
-    // Create sample sun path
-    const sunPathCoords = Array.from({ length: 13 }, (_, i) => {
-      const hour = i + 6; // 6 AM to 6 PM
-      const angle = (hour - 6) * 15 * Math.PI / 180;
-      const radius = Math.max(lngRange, latRange) * 0.3;
-      return [
-        centerLng + Math.sin(angle) * radius,
-        centerLat + Math.cos(angle) * radius * 0.5
-      ];
-    });
-    
-    const sampleSunPath = {
-      type: 'FeatureCollection',
-      features: [{
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: sunPathCoords
-        },
-        properties: { name: 'Sun Path', description: 'Daily sun trajectory' }
-      }]
-    };
-    
-    // Enable layers
-    setLayerVisibility(prev => ({
-      ...prev,
-      contours: true,
-      flowAccumulation: true,
-      sunPath: true
-    }));
-    
-    // Store in analysis layers
-    setAnalysisLayers(prev => ({
-      ...prev,
-      contours: sampleContours,
-      flowAccumulation: sampleFlow,
-      sunPath: sampleSunPath
-    }));
-    
-    // Render all layers immediately with forceVisible=true
-    renderLayer('contours', sampleContours, {
-      color: '#1e40af',
-      weight: 1.5,
-      opacity: 0.8
-    }, true);
-    
-    // Render flow with animated visualization
-    if (sampleFlow.features && sampleFlow.features.length > 0) {
-      const flowLayer = L.geoJSON(sampleFlow, {
-        style: (feature) => {
-          const flowValue = feature.properties?.flow || 1;
-          const width = Math.max(2, Math.min(6, flowValue));
-          return {
-            color: '#06b6d4',
-            weight: width,
-            opacity: 0.9,
-            lineCap: 'round',
-            lineJoin: 'round'
-          };
-        },
-        onEachFeature: (feature, layer) => {
-          if (feature.properties?.name) {
-            layer.bindPopup(feature.properties.name);
-          }
-        }
-      });
-      
-      layerRefs.current.flowAccumulation = flowLayer;
-      flowLayer.addTo(mapInstanceRef.current);
-      log('Fallback flow layer added');
-    }
-    
-    // Render sun path with markers
-    const sunPathLayer = L.geoJSON(sampleSunPath, {
-      style: {
-        color: '#f59e0b',
-        weight: 4,
-        opacity: 0.9,
-        lineCap: 'round',
-        lineJoin: 'round'
-      },
-      onEachFeature: (feature, layer) => {
-        // Add sun markers for key hours
-        const keyHours = [6, 9, 12, 15, 18];
-        keyHours.forEach((hour, idx) => {
-          if (idx < sunPathCoords.length) {
-            const [lng, lat] = sunPathCoords[idx * 2] || sunPathCoords[Math.floor(sunPathCoords.length / 2)];
-            const sunIcon = L.divIcon({
-              className: 'sun-marker',
-              html: `<div style="
-                width: 18px;
-                height: 18px;
-                background: radial-gradient(circle, #fbbf24 0%, #f59e0b 100%);
-                border-radius: 50%;
-                border: 2px solid white;
-                box-shadow: 0 0 8px rgba(251, 191, 36, 0.8);
-              "></div>
-              <div style="
-                position: absolute;
-                top: 22px;
-                left: 50%;
-                transform: translateX(-50%);
-                font-size: 9px;
-                color: #f59e0b;
-                font-weight: bold;
-                white-space: nowrap;
-              ">${hour}:00</div>`,
-              iconSize: [18, 30],
-              iconAnchor: [9, 9]
-            });
-            
-            L.marker([lat, lng], { icon: sunIcon })
-              .bindPopup(`Sun Position: ${hour}:00`)
-              .addTo(mapInstanceRef.current);
-          }
-        });
-      }
-    });
-    
-    layerRefs.current.sunPath = sunPathLayer;
-    sunPathLayer.addTo(mapInstanceRef.current);
-    log('Fallback sun path layer added');
-    
-    showToast('Sample visualizations created! Start backend for real analysis.', 'info');
-  };
+  
+  // REMOVED: All fallback visualization code - was creating fake uniform contours
   
   // ========== POND CALCULATOR ==========
   const calculatePond = () => {
@@ -3070,6 +2889,7 @@ const App = () => {
     );
   }
   
+  // Main render
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden">
       {/* SIDEBAR */}
