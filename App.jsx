@@ -1138,6 +1138,14 @@ const App = () => {
                 }
               });
             }
+            
+            // Special handling for contour overlay tiles (fallback)
+            if (layerKey === 'contours' && layerRefs.current.contourTiles) {
+              if (!map.hasLayer(layerRefs.current.contourTiles)) {
+                layerRefs.current.contourTiles.addTo(map);
+                log('Contour overlay tiles toggled ON');
+              }
+            }
           } else if (!isVisible && isOnMap) {
             map.removeLayer(layer);
             log(`Layer ${layerKey} toggled OFF`);
@@ -1149,6 +1157,12 @@ const App = () => {
                   map.removeLayer(marker);
                 }
               });
+              
+              // Also hide contour overlay tiles (fallback)
+              if (layerRefs.current.contourTiles && map.hasLayer(layerRefs.current.contourTiles)) {
+                map.removeLayer(layerRefs.current.contourTiles);
+                log('Contour overlay tiles toggled OFF');
+              }
             }
           }
         } catch (e) {
