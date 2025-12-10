@@ -1275,17 +1275,31 @@ const App = () => {
         
         // Add OpenTopoMap tiles as overlay (includes contour lines)
         if (mapInstanceRef.current) {
-          const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
+          // Switch basemap to OpenTopoMap for better contour visibility
+          // OpenTopoMap shows brown contour lines clearly on its topographic map
+          if (basemapLayerRef.current) {
+            try {
+              mapInstanceRef.current.removeLayer(basemapLayerRef.current);
+            } catch (e) {
+              logWarn('Error removing basemap:', e);
+            }
+          }
+          
+          // Add OpenTopoMap as the basemap (better for seeing contours)
+          const topoBasemap = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenTopoMap (CC-BY-SA) - Topographic map with contour lines',
             maxZoom: 17,
-            opacity: 0.85, // High opacity for better visibility
-            pane: 'overlayPane', // Render above basemap
-            zIndex: 400 // Ensure it's above other layers
+            subdomains: ['a', 'b', 'c']
           });
           
-          // Add tiles to map
-          contourTiles.addTo(mapInstanceRef.current);
-          layerRefs.current.contourTiles = contourTiles;
+          topoBasemap.addTo(mapInstanceRef.current);
+          basemapLayerRef.current = topoBasemap;
+          
+          // Update basemap state to terrain (OpenTopoMap)
+          setLayerVisibility(prev => ({ ...prev, basemap: 'terrain' }));
+          
+          // Store reference for contour layer toggle
+          layerRefs.current.contourTiles = topoBasemap;
           
           // Ensure contours layer is visible
           setLayerVisibility(prev => ({ ...prev, contours: true }));
@@ -1293,8 +1307,9 @@ const App = () => {
           // Force map to refresh
           mapInstanceRef.current.invalidateSize();
           
-          log('OpenTopoMap contour tiles added as fallback - tiles should be visible now');
-          console.log('Contour fallback activated - OpenTopoMap tiles added with opacity 0.85');
+          log('OpenTopoMap basemap activated - contour lines should be clearly visible as brown lines');
+          console.log('Contour fallback: Switched to OpenTopoMap basemap - look for brown contour lines');
+          showToast('Switched to topographic map - brown lines are contour lines', 'success');
         } else {
           logError('Cannot add contour tiles: map instance not available');
         }
