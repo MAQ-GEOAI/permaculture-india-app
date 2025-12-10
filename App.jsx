@@ -1309,7 +1309,8 @@ const App = () => {
           
           log('OpenTopoMap basemap activated - contour lines should be clearly visible as brown lines');
           console.log('Contour fallback: Switched to OpenTopoMap basemap - look for brown contour lines');
-          showToast('Switched to topographic map - brown lines are contour lines', 'success');
+          console.log('TIP: On OpenTopoMap, contour lines appear as brown/orange lines showing elevation changes');
+          showToast('Switched to topographic map - brown/orange lines are contour lines showing elevation', 'success');
         } else {
           logError('Cannot add contour tiles: map instance not available');
         }
