@@ -1189,7 +1189,10 @@ const App = () => {
       ]);
       
       // Process contours
-      if (contoursRes.status === 'fulfilled' && contoursRes.value.ok) {
+      // Check if request was successful (fulfilled and response ok)
+      const contoursSuccess = contoursRes.status === 'fulfilled' && contoursRes.value && contoursRes.value.ok;
+      
+      if (contoursSuccess) {
         const contoursData = await contoursRes.value.json();
         
         // Validate contours are not uniform (check if they vary)
@@ -1205,11 +1208,19 @@ const App = () => {
           if (isUniform && features.length > 5) {
             // Likely uniform contours - use tile-based instead
             showToast('Generated contours appear uniform. Using pre-generated contour layer instead.', 'info');
-            if (!layerRefs.current.contourTiles && mapInstanceRef.current) {
+            
+            // Remove existing contour tiles if any
+            if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+              mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+              layerRefs.current.contourTiles = null;
+            }
+            
+            if (mapInstanceRef.current) {
               const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
                 attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
                 maxZoom: 17,
-                opacity: 0.6
+                opacity: 0.8, // Increased opacity for better visibility
+                pane: 'overlayPane' // Render above basemap
               });
               contourTiles.addTo(mapInstanceRef.current);
               layerRefs.current.contourTiles = contourTiles;
@@ -1225,11 +1236,19 @@ const App = () => {
           }
         } else {
           showToast('No contours generated. Using pre-generated contour layer.', 'info');
-          if (!layerRefs.current.contourTiles && mapInstanceRef.current) {
+          
+          // Remove existing contour tiles if any
+          if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+            layerRefs.current.contourTiles = null;
+          }
+          
+          if (mapInstanceRef.current) {
             const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
               attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
               maxZoom: 17,
-              opacity: 0.6
+              opacity: 0.8, // Increased opacity for better visibility
+              pane: 'overlayPane' // Render above basemap
             });
             contourTiles.addTo(mapInstanceRef.current);
             layerRefs.current.contourTiles = contourTiles;
@@ -1237,18 +1256,28 @@ const App = () => {
           }
         }
       } else {
-        // Backend failed - use tile-based contour overlay
+        // Backend failed - use tile-based contour overlay immediately
         logWarn('Backend contours unavailable, using tile-based contour overlay');
-        showToast('Using pre-generated contour layer (OpenTopoMap)', 'info');
-        if (!layerRefs.current.contourTiles && mapInstanceRef.current) {
+        showToast('Backend unavailable. Using pre-generated contour layer (OpenTopoMap)', 'info');
+        
+        // Remove existing contour tiles if any
+        if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+          mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+          layerRefs.current.contourTiles = null;
+        }
+        
+        // Add OpenTopoMap tiles as overlay (includes contour lines)
+        if (mapInstanceRef.current) {
           const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
             maxZoom: 17,
-            opacity: 0.6
+            opacity: 0.8, // Increased opacity for better visibility
+            pane: 'overlayPane' // Render above basemap
           });
           contourTiles.addTo(mapInstanceRef.current);
           layerRefs.current.contourTiles = contourTiles;
           setLayerVisibility(prev => ({ ...prev, contours: true }));
+          log('OpenTopoMap contour tiles added as fallback');
         }
       }
       
