@@ -177,7 +177,7 @@ const App = () => {
   
   // Layer Visibility Toggles
   const [layerVisibility, setLayerVisibility] = useState({
-    basemap: 'satellite',
+    basemap: 'satellite', // Always use satellite as default basemap
     contours: true, // Default to true so contours are visible by default
     catchments: false,
     flowAccumulation: false,
@@ -437,22 +437,29 @@ const App = () => {
     if (!mapInstanceRef.current) return;
     
     const map = mapInstanceRef.current;
-    const config = basemapConfigs[layerVisibility.basemap] || basemapConfigs.satellite;
+    // Always use satellite basemap for business requirement
+    const config = basemapConfigs.satellite;
+    
+    // Only update if basemap is not already satellite or if layer doesn't exist
+    if (basemapLayerRef.current && map.hasLayer(basemapLayerRef.current)) {
+      // Check if current basemap is already satellite
+      const currentUrl = basemapLayerRef.current._url;
+      if (currentUrl && currentUrl.includes('World_Imagery')) {
+        // Already satellite, no need to change
+        return;
+      }
+    }
     
     // Remove old basemap
     if (basemapLayerRef.current) {
       map.removeLayer(basemapLayerRef.current);
     }
     
-    // Add new basemap
+    // Add satellite basemap (always)
     const tileLayerOptions = {
       attribution: config.attribution,
       maxZoom: config.maxZoom
     };
-    
-    if (config.subdomains) {
-      tileLayerOptions.subdomains = config.subdomains;
-    }
     
     basemapLayerRef.current = L.tileLayer(config.url, tileLayerOptions);
     basemapLayerRef.current.addTo(map);
@@ -981,11 +988,12 @@ const App = () => {
       
       const contourLine = L.polyline(latlngs, {
         color: color,
-        weight: isBold ? 3 : 1.5,  // Thicker lines for better visibility
-        opacity: isBold ? 0.95 : 0.85,  // More opaque for professional look
+        weight: isBold ? 3.5 : 2,  // Thicker lines for better visibility on satellite
+        opacity: isBold ? 0.9 : 0.75,  // Good opacity for visibility over satellite
         lineCap: 'round',
         lineJoin: 'round',
-        smoothFactor: 1.0  // Smoother lines
+        smoothFactor: 1.0,  // Smoother lines
+        pane: 'overlayPane' // Ensure contours render above basemap
       });
       
       // Add to appropriate group
@@ -1001,23 +1009,24 @@ const App = () => {
         const midIndex = Math.floor(latlngs.length / 2);
         const labelPos = latlngs[midIndex];
         
-        // Create label with elevation text
+        // Create label with elevation text - improved visibility for satellite basemap
         const labelDiv = L.divIcon({
           className: 'contour-label',
           html: `<div style="
-            background: rgba(255, 255, 255, 0.9);
-            border: 1px solid ${color};
-            border-radius: 3px;
-            padding: 2px 6px;
-            font-size: 11px;
-            font-weight: ${isBold ? 'bold' : 'normal'};
+            background: rgba(255, 255, 255, 0.95);
+            border: 2px solid ${color};
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: ${isBold ? '13px' : '11px'};
+            font-weight: ${isBold ? 'bold' : '600'};
             color: ${color};
             white-space: nowrap;
             pointer-events: none;
-            text-shadow: 0 0 2px white;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8), 0 0 4px rgba(255, 255, 255, 0.5);
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
           ">${elevation}m</div>`,
-          iconSize: [50, 20],
-          iconAnchor: [25, 10]
+          iconSize: [60, 24],
+          iconAnchor: [30, 12]
         });
         
         const labelMarker = L.marker(labelPos, { icon: labelDiv });
@@ -1259,8 +1268,18 @@ const App = () => {
             const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
               attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
               maxZoom: 17,
-              opacity: 0.8, // Increased opacity for better visibility
+              subdomains: ['a', 'b', 'c'],
+              opacity: 0.35, // Lower opacity to preserve satellite imagery
               pane: 'overlayPane' // Render above basemap
+            });
+            
+            // Apply CSS filter to enhance contour lines visibility
+            contourTiles.on('tileload', (e) => {
+              const img = e.tile;
+              if (img && img.complete) {
+                img.style.filter = 'contrast(1.3) brightness(0.9) saturate(0.5)';
+                img.style.mixBlendMode = 'multiply';
+              }
             });
             contourTiles.addTo(mapInstanceRef.current);
             layerRefs.current.contourTiles = contourTiles;
@@ -1299,15 +1318,26 @@ const App = () => {
             layerRefs.current.contourTiles = null;
           }
           
-          // Add OpenTopoMap as semi-transparent overlay (shows contour lines over satellite)
-          // This keeps the satellite basemap visible while adding brown contour lines on top
+          // Use a better contour visualization approach
+          // Option 1: Use OpenTopoMap with very low opacity to extract just contour lines
+          // Option 2: Use a dedicated contour tile service if available
+          // For now, use OpenTopoMap with very low opacity and better styling
           const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
             attribution: '© OpenTopoMap (CC-BY-SA) - Contour lines overlay',
             maxZoom: 17,
             subdomains: ['a', 'b', 'c'],
-            opacity: 0.6, // Semi-transparent - satellite shows through, contour lines visible
+            opacity: 0.35, // Lower opacity to preserve satellite imagery while showing contours
             pane: 'overlayPane', // Render above basemap
             zIndex: 400 // Ensure it's above other layers
+          });
+          
+          // Apply CSS filter to enhance contour lines visibility
+          contourOverlay.on('tileload', (e) => {
+            const img = e.tile;
+            if (img && img.complete) {
+              img.style.filter = 'contrast(1.3) brightness(0.9) saturate(0.5)';
+              img.style.mixBlendMode = 'multiply';
+            }
           });
           
           contourOverlay.addTo(mapInstanceRef.current);
@@ -2481,23 +2511,79 @@ const App = () => {
   const prepareForExport = async () => {
     if (!mapInstanceRef.current) return;
     
-    // Ensure all enabled layers are visible
-    Object.keys(layerRefs.current).forEach((layerKey) => {
-      const layer = layerRefs.current[layerKey];
-      if (layer && layerVisibility[layerKey]) {
-        if (!mapInstanceRef.current.hasLayer(layer)) {
-          layer.addTo(mapInstanceRef.current);
+    const map = mapInstanceRef.current;
+    
+    // CRITICAL: Remove ALL other basemap layers and ensure ONLY satellite is active
+    // Remove any non-satellite tile layers
+    map.eachLayer((layer) => {
+      if (layer instanceof L.TileLayer) {
+        const url = layer._url || '';
+        // Remove any non-satellite basemaps (OpenTopoMap, OSM, etc.)
+        if (!url.includes('World_Imagery') && !url.includes('World_Imagery')) {
+          // Check if it's the contour overlay (OpenTopoMap) - keep it if contours are enabled
+          if (url.includes('opentopomap') && layerVisibility.contours) {
+            // Keep contour overlay
+            return;
+          }
+          // Remove other basemaps
+          if (layer !== basemapLayerRef.current && layer !== layerRefs.current.contourTiles) {
+            map.removeLayer(layer);
+          }
         }
       }
     });
     
+    // Force satellite basemap to be added and visible
+    if (!basemapLayerRef.current || !map.hasLayer(basemapLayerRef.current)) {
+      // Remove old basemap if exists
+      if (basemapLayerRef.current) {
+        try {
+          map.removeLayer(basemapLayerRef.current);
+        } catch (e) {}
+      }
+      
+      // Create fresh satellite basemap
+      const satelliteConfig = basemapConfigs.satellite;
+      basemapLayerRef.current = L.tileLayer(satelliteConfig.url, {
+        attribution: satelliteConfig.attribution,
+        maxZoom: satelliteConfig.maxZoom
+      });
+      basemapLayerRef.current.addTo(map);
+    }
+    
+    // Ensure all enabled layers are visible
+    Object.keys(layerRefs.current).forEach((layerKey) => {
+      const layer = layerRefs.current[layerKey];
+      if (layer && layerVisibility[layerKey]) {
+        if (!map.hasLayer(layer)) {
+          layer.addTo(map);
+        }
+      }
+    });
+    
+    // Ensure contour tiles overlay is visible if contours are enabled
+    if (layerVisibility.contours && layerRefs.current.contourTiles) {
+      if (!map.hasLayer(layerRefs.current.contourTiles)) {
+        layerRefs.current.contourTiles.addTo(map);
+      }
+    }
+    
+    // Ensure contour labels are visible if enabled
+    if (contourShowLabels && labelMarkersRef.current) {
+      labelMarkersRef.current.forEach(marker => {
+        if (marker && !map.hasLayer(marker)) {
+          marker.addTo(map);
+        }
+      });
+    }
+    
     // Force map to redraw all layers
-    mapInstanceRef.current.invalidateSize();
+    map.invalidateSize();
     
     // Wait for map to be ready
     await new Promise((resolve) => {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.whenReady(() => {
+      if (map) {
+        map.whenReady(() => {
           resolve();
         });
       } else {
@@ -2505,8 +2591,11 @@ const App = () => {
       }
     });
     
-    // Wait for ALL tiles to load completely
-    await waitForAllTiles(mapInstanceRef.current);
+    // Wait for ALL tiles to load completely - with longer timeout for satellite tiles
+    await waitForAllTiles(map);
+    
+    // Additional wait to ensure satellite tiles are fully rendered
+    await new Promise(resolve => setTimeout(resolve, 2000));
   };
   
   const exportMapPNG = async () => {
@@ -2553,16 +2642,16 @@ const App = () => {
         
         // Capture with better options for Leaflet maps
         const canvas = await html2canvas(mapContainer, {
-          backgroundColor: '#1e293b',
+          backgroundColor: 'transparent',
           useCORS: true,
           logging: false,
           width: mapWidth,
           height: mapHeight,
-          scale: 1, // Use scale 1 to avoid tile misalignment issues
+          scale: 2, // Higher scale for better quality
           allowTaint: true,
-          foreignObjectRendering: false, // Better for Leaflet
+          foreignObjectRendering: true, // Enable for better label rendering
           removeContainer: false,
-          imageTimeout: 30000, // Longer timeout for tiles
+          imageTimeout: 60000, // Longer timeout for tiles
           proxy: undefined,
           ignoreElements: (element) => {
             // Ignore UI controls that are not part of the map
@@ -2585,6 +2674,8 @@ const App = () => {
               clonedMap.style.margin = '0';
               clonedMap.style.padding = '0';
               clonedMap.style.transform = 'none';
+              clonedMap.style.zIndex = '1';
+              clonedMap.style.backgroundColor = 'transparent';
               
               // Fix Leaflet map pane positioning
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
@@ -2594,25 +2685,75 @@ const App = () => {
                 leafletPane.style.left = '0';
                 leafletPane.style.width = '100%';
                 leafletPane.style.height = '100%';
+                leafletPane.style.zIndex = '1';
               }
               
-              // Ensure all tile images are visible and properly positioned
-              const tiles = clonedMap.querySelectorAll('img.leaflet-tile');
-              tiles.forEach((tile) => {
+              // CRITICAL: Ensure satellite basemap tiles are visible and prioritized
+              const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
+              allTiles.forEach((tile) => {
+                const tileSrc = tile.src || '';
                 tile.style.visibility = 'visible';
                 tile.style.opacity = '1';
                 tile.style.display = 'block';
                 tile.style.position = 'absolute';
-                // Remove any transforms that might cause shift
                 tile.style.transform = 'none';
+                tile.style.imageRendering = 'auto';
+                
+                // Prioritize satellite tiles (World_Imagery)
+                if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
+                  tile.style.zIndex = '100';
+                  tile.style.opacity = '1';
+                } else if (tileSrc.includes('opentopomap')) {
+                  // Contour overlay - lower z-index
+                  tile.style.zIndex = '200';
+                  tile.style.opacity = '0.35';
+                }
               });
               
-              // Fix SVG overlays (contours, etc.)
+              // Fix SVG overlays (contours, etc.) - ensure they're above basemap
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
               svgOverlays.forEach((svg) => {
                 svg.style.position = 'absolute';
                 svg.style.top = '0';
                 svg.style.left = '0';
+                svg.style.visibility = 'visible';
+                svg.style.opacity = '1';
+                svg.style.zIndex = '300';
+                svg.style.pointerEvents = 'none';
+              });
+              
+              // CRITICAL: Ensure contour labels are visible and above everything
+              const contourLabels = clonedMap.querySelectorAll('.contour-label');
+              contourLabels.forEach((label) => {
+                label.style.visibility = 'visible';
+                label.style.opacity = '1';
+                label.style.display = 'block';
+                label.style.zIndex = '400';
+                label.style.pointerEvents = 'none';
+                
+                // Ensure label content is visible
+                const labelDiv = label.querySelector('div');
+                if (labelDiv) {
+                  labelDiv.style.visibility = 'visible';
+                  labelDiv.style.opacity = '1';
+                  labelDiv.style.display = 'block';
+                }
+              });
+              
+              // Ensure all marker icons (including label markers) are visible
+              const markerIcons = clonedMap.querySelectorAll('.leaflet-marker-icon');
+              markerIcons.forEach((icon) => {
+                icon.style.visibility = 'visible';
+                icon.style.opacity = '1';
+                icon.style.zIndex = '400';
+                icon.style.pointerEvents = 'none';
+              });
+              
+              // Ensure marker shadows are visible
+              const markerShadows = clonedMap.querySelectorAll('.leaflet-marker-shadow');
+              markerShadows.forEach((shadow) => {
+                shadow.style.visibility = 'visible';
+                shadow.style.opacity = '0.5';
               });
             }
             // Hide all controls in clone
@@ -2702,16 +2843,16 @@ const App = () => {
         
         // Capture the map with better options for Leaflet
         const canvas = await html2canvas(mapContainer, {
-          backgroundColor: '#1e293b',
+          backgroundColor: 'transparent',
           useCORS: true,
           logging: false,
           width: mapWidth,
           height: mapHeight,
-          scale: 1, // Use scale 1 to avoid tile misalignment issues
+          scale: 2, // Higher scale for better quality
           allowTaint: true,
-          foreignObjectRendering: false, // Better for Leaflet
+          foreignObjectRendering: true, // Enable for better label rendering
           removeContainer: false,
-          imageTimeout: 30000, // Longer timeout for tiles
+          imageTimeout: 60000, // Longer timeout for tiles
           onclone: (clonedDoc) => {
             // Ensure map container is visible in clone
             const clonedMap = clonedDoc.getElementById('leaflet-map-container');
@@ -2726,6 +2867,8 @@ const App = () => {
               clonedMap.style.margin = '0';
               clonedMap.style.padding = '0';
               clonedMap.style.transform = 'none';
+              clonedMap.style.zIndex = '1';
+              clonedMap.style.backgroundColor = 'transparent';
               
               // Fix Leaflet map pane positioning
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
@@ -2735,25 +2878,75 @@ const App = () => {
                 leafletPane.style.left = '0';
                 leafletPane.style.width = '100%';
                 leafletPane.style.height = '100%';
+                leafletPane.style.zIndex = '1';
               }
               
-              // Ensure all tile images are visible and properly positioned
-              const tiles = clonedMap.querySelectorAll('img.leaflet-tile');
-              tiles.forEach((tile) => {
+              // CRITICAL: Ensure satellite basemap tiles are visible and prioritized
+              const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
+              allTiles.forEach((tile) => {
+                const tileSrc = tile.src || '';
                 tile.style.visibility = 'visible';
                 tile.style.opacity = '1';
                 tile.style.display = 'block';
                 tile.style.position = 'absolute';
-                // Remove any transforms that might cause shift
                 tile.style.transform = 'none';
+                tile.style.imageRendering = 'auto';
+                
+                // Prioritize satellite tiles (World_Imagery)
+                if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
+                  tile.style.zIndex = '100';
+                  tile.style.opacity = '1';
+                } else if (tileSrc.includes('opentopomap')) {
+                  // Contour overlay - lower z-index
+                  tile.style.zIndex = '200';
+                  tile.style.opacity = '0.35';
+                }
               });
               
-              // Fix SVG overlays (contours, etc.)
+              // Fix SVG overlays (contours, etc.) - ensure they're above basemap
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
               svgOverlays.forEach((svg) => {
                 svg.style.position = 'absolute';
                 svg.style.top = '0';
                 svg.style.left = '0';
+                svg.style.visibility = 'visible';
+                svg.style.opacity = '1';
+                svg.style.zIndex = '300';
+                svg.style.pointerEvents = 'none';
+              });
+              
+              // CRITICAL: Ensure contour labels are visible and above everything
+              const contourLabels = clonedMap.querySelectorAll('.contour-label');
+              contourLabels.forEach((label) => {
+                label.style.visibility = 'visible';
+                label.style.opacity = '1';
+                label.style.display = 'block';
+                label.style.zIndex = '400';
+                label.style.pointerEvents = 'none';
+                
+                // Ensure label content is visible
+                const labelDiv = label.querySelector('div');
+                if (labelDiv) {
+                  labelDiv.style.visibility = 'visible';
+                  labelDiv.style.opacity = '1';
+                  labelDiv.style.display = 'block';
+                }
+              });
+              
+              // Ensure all marker icons (including label markers) are visible
+              const markerIcons = clonedMap.querySelectorAll('.leaflet-marker-icon');
+              markerIcons.forEach((icon) => {
+                icon.style.visibility = 'visible';
+                icon.style.opacity = '1';
+                icon.style.zIndex = '400';
+                icon.style.pointerEvents = 'none';
+              });
+              
+              // Ensure marker shadows are visible
+              const markerShadows = clonedMap.querySelectorAll('.leaflet-marker-shadow');
+              markerShadows.forEach((shadow) => {
+                shadow.style.visibility = 'visible';
+                shadow.style.opacity = '0.5';
               });
             }
             // Hide all controls in clone
