@@ -2577,16 +2577,42 @@ const App = () => {
             if (clonedMap) {
               clonedMap.style.visibility = 'visible';
               clonedMap.style.display = 'block';
-              clonedMap.style.position = 'relative';
+              clonedMap.style.position = 'absolute';
+              clonedMap.style.top = '0';
+              clonedMap.style.left = '0';
               clonedMap.style.width = mapWidth + 'px';
               clonedMap.style.height = mapHeight + 'px';
+              clonedMap.style.margin = '0';
+              clonedMap.style.padding = '0';
+              clonedMap.style.transform = 'none';
               
-              // Ensure all tile images are visible
+              // Fix Leaflet map pane positioning
+              const leafletPane = clonedMap.querySelector('.leaflet-pane');
+              if (leafletPane) {
+                leafletPane.style.position = 'absolute';
+                leafletPane.style.top = '0';
+                leafletPane.style.left = '0';
+                leafletPane.style.width = '100%';
+                leafletPane.style.height = '100%';
+              }
+              
+              // Ensure all tile images are visible and properly positioned
               const tiles = clonedMap.querySelectorAll('img.leaflet-tile');
               tiles.forEach((tile) => {
                 tile.style.visibility = 'visible';
                 tile.style.opacity = '1';
                 tile.style.display = 'block';
+                tile.style.position = 'absolute';
+                // Remove any transforms that might cause shift
+                tile.style.transform = 'none';
+              });
+              
+              // Fix SVG overlays (contours, etc.)
+              const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
+              svgOverlays.forEach((svg) => {
+                svg.style.position = 'absolute';
+                svg.style.top = '0';
+                svg.style.left = '0';
               });
             }
             // Hide all controls in clone
@@ -2692,16 +2718,42 @@ const App = () => {
             if (clonedMap) {
               clonedMap.style.visibility = 'visible';
               clonedMap.style.display = 'block';
-              clonedMap.style.position = 'relative';
+              clonedMap.style.position = 'absolute';
+              clonedMap.style.top = '0';
+              clonedMap.style.left = '0';
               clonedMap.style.width = mapWidth + 'px';
               clonedMap.style.height = mapHeight + 'px';
+              clonedMap.style.margin = '0';
+              clonedMap.style.padding = '0';
+              clonedMap.style.transform = 'none';
               
-              // Ensure all tile images are visible
+              // Fix Leaflet map pane positioning
+              const leafletPane = clonedMap.querySelector('.leaflet-pane');
+              if (leafletPane) {
+                leafletPane.style.position = 'absolute';
+                leafletPane.style.top = '0';
+                leafletPane.style.left = '0';
+                leafletPane.style.width = '100%';
+                leafletPane.style.height = '100%';
+              }
+              
+              // Ensure all tile images are visible and properly positioned
               const tiles = clonedMap.querySelectorAll('img.leaflet-tile');
               tiles.forEach((tile) => {
                 tile.style.visibility = 'visible';
                 tile.style.opacity = '1';
                 tile.style.display = 'block';
+                tile.style.position = 'absolute';
+                // Remove any transforms that might cause shift
+                tile.style.transform = 'none';
+              });
+              
+              // Fix SVG overlays (contours, etc.)
+              const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
+              svgOverlays.forEach((svg) => {
+                svg.style.position = 'absolute';
+                svg.style.top = '0';
+                svg.style.left = '0';
               });
             }
             // Hide all controls in clone
