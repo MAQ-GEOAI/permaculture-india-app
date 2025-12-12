@@ -12,7 +12,8 @@ pip==24.0
 numpy==1.24.3
 scipy==1.11.4
 requests==2.31.0
-# Note: scipy is required for fast contour generation (griddata, gaussian_filter)
+matplotlib==3.8.2
+# Note: scipy and matplotlib are required for accurate contour generation (CONREC algorithm)
 
 # Geospatial (rasterio needs GDAL, but we'll handle it differently)
 rasterio==1.3.9; sys_platform != "win32"
