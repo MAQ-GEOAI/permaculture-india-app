@@ -24,6 +24,5 @@ python-dotenv==1.0.0
 # AI (optional)
 openai==1.3.0
 
-# Note: GDAL and whitebox are complex to install on Render
-# They require system-level dependencies
-# Consider using alternative approaches or Docker
+# Note: whitebox is optional - code will work without it
+# GDAL/rasterio may need system packages on some platforms
