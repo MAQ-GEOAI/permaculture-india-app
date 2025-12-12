@@ -1207,18 +1207,21 @@ const App = () => {
     }
     
     try {
-      // First, test if backend is alive
+      // Test backend health with short timeout (don't block if slow)
+      let backendAlive = false;
       try {
-        const healthCheck = await fetch(`${BACKEND_URL}/`, { signal: AbortSignal.timeout(5000) });
-        if (!healthCheck.ok) {
-          throw new Error(`Backend health check failed: ${healthCheck.status}`);
+        const healthController = new AbortController();
+        const healthTimeout = setTimeout(() => healthController.abort(), 5000);
+        const healthCheck = await fetch(`${BACKEND_URL}/`, { signal: healthController.signal });
+        clearTimeout(healthTimeout);
+        if (healthCheck.ok) {
+          backendAlive = true;
+          log('Backend is alive and responding');
         }
-        log('Backend is alive and responding');
       } catch (healthError) {
-        logError('Backend health check failed:', healthError);
-        showToast('Backend is not responding. Check if it\'s deployed and running.', 'error');
-        setIsAnalyzing(false);
-        return;
+        logWarn('Backend health check failed or timed out:', healthError);
+        // Continue anyway - backend might be slow but still work
+        showToast('Backend may be slow. Proceeding with analysis...', 'info');
       }
       
       // NEW APPROACH: Use OpenTopoMap contour tile overlay instead of generating from DEM
@@ -1615,16 +1618,54 @@ const App = () => {
       
       // Check if we got any results
       let hasResults = false;
-      if (contoursRes && contoursRes.status === 'fulfilled' && contoursRes.value.ok) hasResults = true;
-      if (hydrologyRes && hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) hasResults = true;
+      let resultCount = 0;
+      const resultMessages = [];
+      
+      if (contoursRes && contoursRes.status === 'fulfilled' && contoursRes.value && contoursRes.value.ok) {
+        hasResults = true;
+        resultCount++;
+        resultMessages.push('Contours');
+      }
+      if (hydrologyRes && hydrologyRes.status === 'fulfilled' && hydrologyRes.value && hydrologyRes.value.ok) {
+        hasResults = true;
+        resultCount++;
+        resultMessages.push('Hydrology');
+      }
+      if (slopeAspectRes && slopeAspectRes.status === 'fulfilled' && slopeAspectRes.value && slopeAspectRes.value.ok) {
+        hasResults = true;
+        resultCount++;
+        resultMessages.push('Slope/Aspect');
+      }
       
       if (hasResults) {
-        showToast('Analysis complete! All layers are visible on the map.', 'success');
+        showToast(`Analysis complete! ${resultMessages.join(', ')} loaded.`, 'success');
       } else {
-        // No results from backend - create fallback
-        log('No backend results, creating fallback visualizations...');
-        // DO NOT use fallback - show error instead
-        // Fallback creates fake data that doesn't represent real terrain
+        // No results - show helpful error
+        const errors = [];
+        if (contoursRes.status === 'rejected') {
+          errors.push(`Contours: ${contoursRes.reason?.message || 'Request failed'}`);
+        } else if (contoursRes.value && !contoursRes.value.ok) {
+          errors.push(`Contours: HTTP ${contoursRes.value.status}`);
+        }
+        
+        if (hydrologyRes.status === 'rejected') {
+          errors.push(`Hydrology: ${hydrologyRes.reason?.message || 'Request failed'}`);
+        } else if (hydrologyRes.value && !hydrologyRes.value.ok) {
+          errors.push(`Hydrology: HTTP ${hydrologyRes.value.status}`);
+        }
+        
+        if (slopeAspectRes.status === 'rejected') {
+          errors.push(`Slope/Aspect: ${slopeAspectRes.reason?.message || 'Request failed'}`);
+        } else if (slopeAspectRes.value && !slopeAspectRes.value.ok) {
+          errors.push(`Slope/Aspect: HTTP ${slopeAspectRes.value.status}`);
+        }
+        
+        if (errors.length > 0) {
+          logWarn('Backend requests failed:', errors);
+          showToast(`Backend processing failed: ${errors[0]}. Try a smaller area or wait for backend to spin up (free tier takes ~50s).`, 'error');
+        } else {
+          showToast('No data received from backend. Backend may be spinning up (free tier takes ~50s).', 'warning');
+        }
       }
     } catch (error) {
       // Handle backend connection errors gracefully
