@@ -1172,7 +1172,7 @@ const App = () => {
     // Remove any OpenTopoMap contour tiles - we only want actual contour GeoJSON data
     const contourTilesLayer = layerRefs.current.contourTiles;
     if (contourTilesLayer && map.hasLayer(contourTilesLayer)) {
-      map.removeLayer(contourTilesLayer);
+        map.removeLayer(contourTilesLayer);
       layerRefs.current.contourTiles = null;
       log('Removed OpenTopoMap overlay - using only contour GeoJSON data');
     }
@@ -1236,12 +1236,12 @@ const App = () => {
       return;
     }
     
-    // Global timeout for entire analysis (3 minutes max)
+    // Global timeout for entire analysis (2 minutes max - fast method should be much quicker)
     const analysisTimeout = setTimeout(() => {
-      logError('Analysis timed out after 3 minutes');
-      showToast('Analysis timed out. Backend may be slow. Try a smaller area.', 'error');
+      logError('Analysis timed out after 2 minutes');
+      showToast('Analysis timed out. Try a smaller area or check backend logs.', 'error');
       setIsAnalyzing(false);
-    }, 180000); // 3 minutes
+    }, 120000); // 2 minutes
     
     try {
       // Test backend health with short timeout (don't block if slow)
@@ -1311,22 +1311,22 @@ const App = () => {
       }
       
       // Fetch all layers in parallel with timeouts - with progress tracking
-      showToast('Fetching terrain data from backend (this may take 2-3 minutes for free tier)...', 'info');
+      showToast('Fetching terrain data from backend (should take 10-30 seconds)...', 'info');
       log('Starting parallel backend requests...');
       log(`Backend URL: ${BACKEND_URL}`);
       log(`Contour URL: ${contourUrl}`);
       
-      // Use longer timeout for free tier backend (may need to wake up)
+      // Fast method - should complete in 10-30 seconds
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetchWithTimeout(contourUrl, 180000).catch(e => { // 3 minutes for contours (DEM processing is slow)
+        fetchWithTimeout(contourUrl, 60000).catch(e => { // 1 minute for fast contours
           logWarn('Contours request failed:', e);
           throw e;
         }),
-        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 180000).catch(e => {
+        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 60000).catch(e => {
           logWarn('Hydrology request failed:', e);
           throw e;
         }),
-        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 180000).catch(e => {
+        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 60000).catch(e => {
           logWarn('Slope/aspect request failed:', e);
           throw e;
         })
@@ -1351,15 +1351,15 @@ const App = () => {
         }
         
         // Remove any OpenTopoMap overlay tiles - we only want actual contour GeoJSON data
-        if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+            if (layerRefs.current.contourTiles && mapInstanceRef.current) {
           try {
-            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+              mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
           } catch (e) {
             logWarn('Error removing contour tiles:', e);
           }
-          layerRefs.current.contourTiles = null;
-        }
-        
+              layerRefs.current.contourTiles = null;
+            }
+            
         // Validate contours data
         const features = contoursData.features || [];
         log(`Contours validation: ${features.length} features found`);
@@ -1367,13 +1367,13 @@ const App = () => {
         if (features.length > 0) {
           // CRITICAL: Enable contours layer and render immediately
           log('Rendering contours on map...');
-          setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
+            setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
           setLayerVisibility(prev => ({ ...prev, contours: true })); // Force enable
           
           // Render contours with forceVisible=true to ensure they appear
-          renderContours(contoursData, true);
+            renderContours(contoursData, true);
           
-          const count = features.length;
+            const count = features.length;
           log(`✅ Contours rendered successfully: ${count} lines`);
           showToast(`✅ Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
         } else {
@@ -1422,7 +1422,7 @@ const App = () => {
         }
         setAnalysisLayers(prev => ({ ...prev, contours: null }));
         // Keep contours enabled in UI so user can see it's supposed to be there
-        setLayerVisibility(prev => ({ ...prev, contours: true }));
+          setLayerVisibility(prev => ({ ...prev, contours: true }));
       }
       
       // Process hydrology
@@ -1570,7 +1570,7 @@ const App = () => {
         if (sunRes.ok) {
           const sunData = await sunRes.json();
           if (sunData && !sunData.error) {
-            setAnalysisLayers(prev => ({ ...prev, sunPath: sunData }));
+          setAnalysisLayers(prev => ({ ...prev, sunPath: sunData }));
           } else {
             logWarn('Sun path data has error:', sunData.error);
           }
@@ -1639,8 +1639,8 @@ const App = () => {
               aspectLayer.addTo(mapInstanceRef.current);
             }
             showToast(`Aspect analysis loaded: ${slopeAspectData.aspect.features.length} points`, 'success');
-          }
-        } catch (err) {
+        }
+      } catch (err) {
           logWarn('Slope/aspect processing failed:', err);
         }
       }
@@ -2582,14 +2582,14 @@ const App = () => {
         if (loadedCount === tilesTotal && tilesTotal > 0) {
           consecutiveChecks++;
           if (consecutiveChecks >= REQUIRED_CONSECUTIVE) {
-            clearInterval(checkInterval);
-            clearTimeout(timeout);
+          clearInterval(checkInterval);
+          clearTimeout(timeout);
             // Extra wait to ensure rendering is complete
             setTimeout(() => {
               log(`All ${tilesTotal} tiles loaded successfully`);
               resolve();
             }, 1000);
-            return;
+          return;
           }
         } else {
           consecutiveChecks = 0; // Reset if not all loaded
@@ -2874,9 +2874,9 @@ const App = () => {
                 
                 // Only show satellite tiles - hide OpenTopoMap tiles
                 if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
-                  tile.style.visibility = 'visible';
-                  tile.style.opacity = '1';
-                  tile.style.display = 'block';
+                tile.style.visibility = 'visible';
+                tile.style.opacity = '1';
+                tile.style.display = 'block';
                   tile.style.zIndex = '100';
                 } else if (tileSrc.includes('opentopomap')) {
                   // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
@@ -3149,9 +3149,9 @@ const App = () => {
                 
                 // Only show satellite tiles - hide OpenTopoMap tiles
                 if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
-                  tile.style.visibility = 'visible';
-                  tile.style.opacity = '1';
-                  tile.style.display = 'block';
+                tile.style.visibility = 'visible';
+                tile.style.opacity = '1';
+                tile.style.display = 'block';
                   tile.style.zIndex = '100';
                 } else if (tileSrc.includes('opentopomap')) {
                   // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
