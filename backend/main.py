@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from dem import get_dem_stats, get_dem_tile
 from contours import generate_contours
+from contours_fast import generate_contours_fast
 from hydro import run_hydrology
 from sun import sun_path
 from ai import ask_ai
@@ -39,7 +40,7 @@ def dem_tile(bbox: str):
     return get_dem_tile(bbox)
 
 @app.get("/contours")
-def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
+def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None, fast: bool = True):
     """
     Generate contours with professional features
     
@@ -47,13 +48,20 @@ def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
         bbox: Bounding box "minx,miny,maxx,maxy"
         interval: Contour interval in meters (0.5, 1, 2, 5, 10, 20, 50, 100)
         bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour)
+        fast: Use fast API-based method (default: True) - much faster than DEM processing
     """
     import time
     start_time = time.time()
-    print(f"[CONTOURS ENDPOINT] Starting contour generation for bbox={bbox}, interval={interval}")
+    print(f"[CONTOURS ENDPOINT] Starting contour generation (fast={fast}) for bbox={bbox}, interval={interval}")
     
     try:
-        result = generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+        # Use fast method by default (OpenElevation API) - much faster for free tier
+        if fast:
+            result = generate_contours_fast(bbox, interval=interval, bold_interval=bold_interval)
+        else:
+            # Fallback to DEM-based method (slower but more accurate)
+            result = generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+        
         elapsed = time.time() - start_time
         feature_count = len(result.get('features', []))
         print(f"[CONTOURS ENDPOINT] ✅ Success: {feature_count} features generated in {elapsed:.2f}s")
@@ -61,6 +69,19 @@ def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
     except Exception as e:
         elapsed = time.time() - start_time
         print(f"[CONTOURS ENDPOINT] ❌ Error after {elapsed:.2f}s: {e}")
+        
+        # If fast method fails, try slow method as fallback
+        if fast:
+            print(f"[CONTOURS ENDPOINT] Fast method failed, trying DEM-based method...")
+            try:
+                result = generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+                elapsed = time.time() - start_time
+                feature_count = len(result.get('features', []))
+                print(f"[CONTOURS ENDPOINT] ✅ Fallback success: {feature_count} features in {elapsed:.2f}s")
+                return result
+            except Exception as e2:
+                print(f"[CONTOURS ENDPOINT] Fallback also failed: {e2}")
+        
         import traceback
         traceback.print_exc()
         return {
