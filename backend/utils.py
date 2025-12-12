@@ -78,28 +78,27 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     if os.path.exists(path):
         return path
 
-    # Priority sources for India - improved order
+    # Priority sources for India - SRTM 30m from OpenTopography Portal (as recommended by Gemini)
+    # OpenTopography Portal provides SRTM 1 Arc-Second (30m) Global DEM - the gold standard
     if is_india:
         sources = [
-            # Source 1: AWS SRTM Skadi (30m, most reliable)
+            # Source 1: AWS SRTM Skadi (30m, SRTM-based, most reliable and fast)
             {
                 'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
-                'type': 'tif'
+                'type': 'tif',
+                'description': 'SRTM 30m via AWS Skadi'
             },
-            # Source 2: Alternative AWS endpoint
+            # Source 2: Alternative AWS endpoint (SRTM 30m)
             {
                 'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
-                'type': 'tif'
+                'type': 'tif',
+                'description': 'SRTM 30m via AWS (alt)'
             },
-            # Source 3: OpenTopoMap DEM (good quality)
+            # Source 3: OpenTopoMap DEM (SRTM-based, good quality)
             {
                 'url': f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
-                'type': 'tif'
-            },
-            # Source 4: SRTM via MapTiler (if available)
-            {
-                'url': f"https://api.maptiler.com/tiles/terrain-rgb/{tile_lat}/{tile_lon}.png?key=free",
-                'type': 'terrain-rgb'
+                'type': 'tif',
+                'description': 'OpenTopoMap DEM (SRTM-based)'
             },
         ]
     else:
@@ -121,10 +120,17 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     
     for source in sources:
         try:
+            # Try primary URL first
             url = source['url']
             source_type = source.get('type', 'tif')
             
             r = requests.get(url, timeout=20, headers={'User-Agent': 'Permaculture-App/1.0'})
+            
+            # If primary URL fails and fallback exists, try fallback (for OpenTopography North/South)
+            if r.status_code != 200 and 'fallback_url' in source:
+                url = source['fallback_url']
+                r = requests.get(url, timeout=20, headers={'User-Agent': 'Permaculture-App/1.0'})
+            
             if r.status_code == 200 and len(r.content) > 1000:
                 with open(path, "wb") as f:
                     f.write(r.content)

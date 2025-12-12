@@ -925,9 +925,11 @@ const App = () => {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }, []);
   
-  // ========== ALTERNATIVE CONTOUR GENERATION (When Backend Unavailable) ==========
-  const generateContoursFromElevationAPI = useCallback(async (bbox, interval, boldInterval) => {
-    try {
+  // NOTE: Real terrain contours are generated from SRTM DEM data on the backend
+  // The backend uses SRTM 30m data (AWS Skadi tiles) for accurate terrain contours
+  // Client-side contour generation was removed as it creates uniform/unrealistic contours
+  
+  // ========== SPECIALIZED CONTOUR RENDERING ==========
       const [minx, miny, maxx, maxy] = bbox.split(',').map(parseFloat);
       
       // Create a grid of points for elevation query (simplified approach)
@@ -1451,58 +1453,33 @@ const App = () => {
           setAnalysisLayers(prev => ({ ...prev, contours: null }));
         }
       } else {
-        // Backend failed - try alternative contour source
+        // Backend failed - cannot generate real terrain contours without backend
+        // Real contours require SRTM DEM data processing which must be done server-side
         const errorReason = contoursRes.status === 'rejected' 
           ? 'Network/CORS error' 
           : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
-        logWarn(`Backend contours unavailable (${errorReason}), trying alternative source...`);
-        showToast('Backend unavailable. Trying alternative contour source...', 'info');
+        logWarn(`Backend contours unavailable (${errorReason})`);
+        showToast('Backend unavailable. Real terrain contours require SRTM DEM processing on the server. Please check backend connection.', 'error');
         
-        // Try using OpenElevation API to get elevation data and generate contours client-side
-        try {
-          const altContours = await generateContoursFromElevationAPI(bbox, contourInterval, contourBoldInterval);
-          if (altContours && altContours.features && altContours.features.length > 0) {
-            // Remove any OpenTopoMap overlay tiles
-            if (layerRefs.current.contourTiles && mapInstanceRef.current) {
-              try {
-                mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-              } catch (e) {}
-              layerRefs.current.contourTiles = null;
-            }
-            
-            // Use alternative contours
-            setAnalysisLayers(prev => ({ ...prev, contours: altContours }));
-            setLayerVisibility(prev => ({ ...prev, contours: true }));
-            renderContours(altContours, true);
-            const count = altContours.features.length;
-            showToast(`Contours loaded from alternative source: ${count} lines`, 'success');
-          } else {
-            throw new Error('No contours from alternative source');
+        // Remove any existing contour tiles or layers
+        if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+          } catch (e) {
+            logWarn('Error removing contour tiles:', e);
           }
-        } catch (altError) {
-          logError('Alternative contour source failed:', altError);
-          showToast('Cannot load contours. Backend unavailable and alternative source failed.', 'error');
-          
-          // Remove any existing contour tiles or layers
-          if (layerRefs.current.contourTiles && mapInstanceRef.current) {
-            try {
-              mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-            } catch (e) {
-              logWarn('Error removing contour tiles:', e);
-            }
-            layerRefs.current.contourTiles = null;
-          }
-          
-          // Clear contour data
-          if (layerRefs.current.contours) {
-            try {
-              mapInstanceRef.current.removeLayer(layerRefs.current.contours);
-            } catch (e) {}
-            layerRefs.current.contours = null;
-          }
-          setAnalysisLayers(prev => ({ ...prev, contours: null }));
-          setLayerVisibility(prev => ({ ...prev, contours: false }));
+          layerRefs.current.contourTiles = null;
         }
+        
+        // Clear contour data - we cannot generate real contours client-side
+        if (layerRefs.current.contours) {
+          try {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contours);
+          } catch (e) {}
+          layerRefs.current.contours = null;
+        }
+        setAnalysisLayers(prev => ({ ...prev, contours: null }));
+        setLayerVisibility(prev => ({ ...prev, contours: false }));
       }
       
       // Process hydrology
