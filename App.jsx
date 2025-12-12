@@ -930,10 +930,10 @@ const App = () => {
   // Client-side contour generation was removed as it creates uniform/unrealistic contours
   
   // ========== SPECIALIZED CONTOUR RENDERING ==========
-      const [minx, miny, maxx, maxy] = bbox.split(',').map(parseFloat);
-      
-      // Create a grid of points for elevation query (simplified approach)
-      const gridSize = 15; // 15x15 grid for reasonable detail without too many API calls
+  const renderContours = useCallback((geojson, forceVisible = null) => {
+    if (!mapInstanceRef.current || !geojson || !geojson.features) return;
+    
+    const map = mapInstanceRef.current;
       const latStep = (maxy - miny) / gridSize;
       const lonStep = (maxx - minx) / gridSize;
       
