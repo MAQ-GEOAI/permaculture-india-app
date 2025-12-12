@@ -48,14 +48,26 @@ def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
         interval: Contour interval in meters (0.5, 1, 2, 5, 10, 20, 50, 100)
         bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour)
     """
+    import time
+    start_time = time.time()
+    print(f"[CONTOURS ENDPOINT] Starting contour generation for bbox={bbox}, interval={interval}")
+    
     try:
-        return generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+        result = generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+        elapsed = time.time() - start_time
+        feature_count = len(result.get('features', []))
+        print(f"[CONTOURS ENDPOINT] ✅ Success: {feature_count} features generated in {elapsed:.2f}s")
+        return result
     except Exception as e:
-        print(f"[CONTOURS ENDPOINT] Error: {e}")
+        elapsed = time.time() - start_time
+        print(f"[CONTOURS ENDPOINT] ❌ Error after {elapsed:.2f}s: {e}")
+        import traceback
+        traceback.print_exc()
         return {
             "type": "FeatureCollection",
             "features": [],
-            "error": str(e)
+            "error": str(e),
+            "processing_time_seconds": round(elapsed, 2)
         }
 
 @app.get("/contours/export")
