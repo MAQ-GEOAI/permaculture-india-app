@@ -1071,11 +1071,24 @@ const App = () => {
     const contourGroup = L.featureGroup([regularContours, boldContours]);
     layerRefs.current.contours = contourGroup;
     
-    // Add to map if visible
+    // CRITICAL: Always add to map if forceVisible is true, or if contours are enabled
     const shouldBeVisible = forceVisible !== null ? forceVisible : (layerVisibility.contours === true);
+    
     if (shouldBeVisible) {
       contourGroup.addTo(map);
-      log(`Contours rendered: ${geojson.features.length} features (${boldContours.getLayers().length} bold)`);
+      log(`✅ Contours added to map: ${geojson.features.length} features (${boldContours.getLayers().length} bold, ${regularContours.getLayers().length} regular)`);
+      
+      // Also add all label markers
+      labelMarkersRef.current.forEach(marker => {
+        if (marker && !map.hasLayer(marker)) {
+          marker.addTo(map);
+        }
+      });
+      
+      // Force map to update
+      map.invalidateSize();
+    } else {
+      logWarn('Contours not added to map - visibility is false');
     }
   }, [layerVisibility.contours, contourShowLabels, log, logWarn, getColorFromNormalized]);
   
