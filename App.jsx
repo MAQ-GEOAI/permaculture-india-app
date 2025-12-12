@@ -177,27 +177,27 @@ const App = () => {
   
   // Layer Visibility Toggles
   const [layerVisibility, setLayerVisibility] = useState({
-    basemap: 'satellite', // Always use satellite as default basemap
-    contours: true, // Default to true so contours are visible by default
-    catchments: false,
-    flowAccumulation: false,
-    naturalPonds: false,
-    slope: false,
-    aspect: false,
-    soilClassifier: false,
-    vegetationDensity: false,
-    recommendedSwales: false,
-    optimalWindbreaks: false,
-    sunPath: false,
-    winterSunrise: false,
-    winterSunset: false,
-    summerSunrise: false,
-    summerSunset: false,
-    windFlow: false,
-    primaryWindSector: false,
-    secondaryWindSector: false,
-    primaryWindArea: false,
-    secondaryWindArea: false
+    basemap: 'satellite', // Default to satellite basemap
+    contours: true, // Enabled by default
+    catchments: true, // Enable all layers by default
+    flowAccumulation: true,
+    naturalPonds: true,
+    slope: true,
+    aspect: true,
+    soilClassifier: true,
+    vegetationDensity: true,
+    recommendedSwales: true,
+    optimalWindbreaks: true,
+    sunPath: true,
+    winterSunrise: true,
+    winterSunset: true,
+    summerSunrise: true,
+    summerSunset: true,
+    windFlow: true,
+    primaryWindSector: true,
+    secondaryWindSector: true,
+    primaryWindArea: true,
+    secondaryWindArea: true
   });
   
   // UI State
@@ -437,15 +437,19 @@ const App = () => {
     if (!mapInstanceRef.current) return;
     
     const map = mapInstanceRef.current;
-    // Always use satellite basemap for business requirement
-    const config = basemapConfigs.satellite;
+    // Get selected basemap from layerVisibility (default to satellite)
+    const selectedBasemap = layerVisibility.basemap || 'satellite';
+    const config = basemapConfigs[selectedBasemap] || basemapConfigs.satellite;
     
-    // Only update if basemap is not already satellite or if layer doesn't exist
+    // Only update if basemap has changed
     if (basemapLayerRef.current && map.hasLayer(basemapLayerRef.current)) {
-      // Check if current basemap is already satellite
-      const currentUrl = basemapLayerRef.current._url;
-      if (currentUrl && currentUrl.includes('World_Imagery')) {
-        // Already satellite, no need to change
+      const currentUrl = basemapLayerRef.current._url || '';
+      // Check if current basemap matches selected basemap
+      const urlMatches = config.url.includes('{z}') 
+        ? currentUrl.includes(config.url.split('{z}')[0])
+        : currentUrl.includes(config.url.split('/tile/')[0]);
+      if (urlMatches) {
+        // Already correct basemap, no need to change
         return;
       }
     }
@@ -455,11 +459,15 @@ const App = () => {
       map.removeLayer(basemapLayerRef.current);
     }
     
-    // Add satellite basemap (always)
+    // Add new basemap
     const tileLayerOptions = {
       attribution: config.attribution,
       maxZoom: config.maxZoom
     };
+    
+    if (config.subdomains) {
+      tileLayerOptions.subdomains = config.subdomains;
+    }
     
     basemapLayerRef.current = L.tileLayer(config.url, tileLayerOptions);
     basemapLayerRef.current.addTo(map);
@@ -934,214 +942,6 @@ const App = () => {
     if (!mapInstanceRef.current || !geojson || !geojson.features) return;
     
     const map = mapInstanceRef.current;
-      const latStep = (maxy - miny) / gridSize;
-      const lonStep = (maxx - minx) / gridSize;
-      
-      const points = [];
-      for (let i = 0; i <= gridSize; i++) {
-        for (let j = 0; j <= gridSize; j++) {
-          const lat = miny + (i * latStep);
-          const lon = minx + (j * lonStep);
-          points.push({ latitude: lat, longitude: lon });
-        }
-      }
-      
-      // Use OpenElevation API (free, no API key needed, CORS enabled)
-      showToast('Fetching elevation data from public API...', 'info');
-      const elevationUrl = 'https://api.open-elevation.com/api/v1/lookup';
-      const elevationRes = await fetch(elevationUrl, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ locations: points })
-      });
-      
-      if (!elevationRes.ok) {
-        throw new Error(`Elevation API failed: ${elevationRes.status}`);
-      }
-      
-      const elevationData = await elevationRes.json();
-      if (!elevationData.results || elevationData.results.length === 0) {
-        throw new Error('No elevation data returned');
-      }
-      
-      const elevations = elevationData.results.map(r => r.elevation || 0);
-      const validElevations = elevations.filter(e => e !== null && e !== undefined && !isNaN(e));
-      if (validElevations.length === 0) {
-        throw new Error('No valid elevation data');
-      }
-      
-      const minElev = Math.min(...validElevations);
-      const maxElev = Math.max(...validElevations);
-      
-      if (maxElev === minElev) {
-        throw new Error('Elevation data is uniform (flat terrain)');
-      }
-      
-      // Generate contour lines using interpolation
-      const features = [];
-      const contourLevels = [];
-      
-      // Calculate contour levels
-      const startLevel = Math.ceil(minElev / interval) * interval;
-      const endLevel = Math.floor(maxElev / interval) * interval;
-      for (let level = startLevel; level <= endLevel; level += interval) {
-        contourLevels.push(level);
-      }
-      
-      // Build elevation grid
-      const grid = [];
-      let idx = 0;
-      for (let i = 0; i <= gridSize; i++) {
-        grid[i] = [];
-        for (let j = 0; j <= gridSize; j++) {
-          grid[i][j] = elevations[idx++] || 0;
-        }
-      }
-      
-      // Generate contour lines for each level using simplified marching squares
-      contourLevels.forEach(level => {
-        const contourSegments = [];
-        
-        // Find crossing points along grid edges
-        for (let i = 0; i < gridSize; i++) {
-          for (let j = 0; j < gridSize; j++) {
-            const z1 = grid[i][j];
-            const z2 = grid[i][j + 1];
-            const z3 = grid[i + 1][j + 1];
-            const z4 = grid[i + 1][j];
-            
-            // Check each edge for level crossing
-            const edges = [];
-            
-            // Top edge (z1 to z2)
-            if ((z1 <= level && z2 > level) || (z1 > level && z2 <= level)) {
-              const t = Math.abs((level - z1) / (z2 - z1));
-              const lat = miny + (i * latStep);
-              const lon = minx + ((j + t) * lonStep);
-              edges.push({ point: [lon, lat], edge: 'top' });
-            }
-            
-            // Right edge (z2 to z3)
-            if ((z2 <= level && z3 > level) || (z2 > level && z3 <= level)) {
-              const t = Math.abs((level - z2) / (z3 - z2));
-              const lat = miny + ((i + t) * latStep);
-              const lon = minx + ((j + 1) * lonStep);
-              edges.push({ point: [lon, lat], edge: 'right' });
-            }
-            
-            // Bottom edge (z3 to z4)
-            if ((z3 <= level && z4 > level) || (z3 > level && z4 <= level)) {
-              const t = Math.abs((level - z3) / (z4 - z3));
-              const lat = miny + ((i + 1) * latStep);
-              const lon = minx + ((j + 1 - t) * lonStep);
-              edges.push({ point: [lon, lat], edge: 'bottom' });
-            }
-            
-            // Left edge (z4 to z1)
-            if ((z4 <= level && z1 > level) || (z4 > level && z1 <= level)) {
-              const t = Math.abs((level - z4) / (z1 - z4));
-              const lat = miny + ((i + 1 - t) * latStep);
-              const lon = minx + (j * lonStep);
-              edges.push({ point: [lon, lat], edge: 'left' });
-            }
-            
-            // Add edges to segments
-            edges.forEach(e => contourSegments.push(e.point));
-          }
-        }
-        
-        // Connect nearby points into contour lines
-        if (contourSegments.length >= 2) {
-          // Sort points by proximity and connect them
-          const lines = [];
-          const used = new Set();
-          
-          for (let i = 0; i < contourSegments.length; i++) {
-            if (used.has(i)) continue;
-            
-            const line = [contourSegments[i]];
-            used.add(i);
-            let currentPoint = contourSegments[i];
-            let found = true;
-            
-            while (found) {
-              found = false;
-              let closestIdx = -1;
-              let closestDist = Infinity;
-              
-              for (let j = 0; j < contourSegments.length; j++) {
-                if (used.has(j)) continue;
-                
-                const dist = Math.sqrt(
-                  Math.pow(contourSegments[j][0] - currentPoint[0], 2) +
-                  Math.pow(contourSegments[j][1] - currentPoint[1], 2)
-                );
-                
-                if (dist < 0.02 && dist < closestDist) { // Connect if within reasonable distance
-                  closestIdx = j;
-                  closestDist = dist;
-                  found = true;
-                }
-              }
-              
-              if (found) {
-                line.push(contourSegments[closestIdx]);
-                currentPoint = contourSegments[closestIdx];
-                used.add(closestIdx);
-              }
-            }
-            
-            if (line.length >= 2) {
-              lines.push(line);
-            }
-          }
-          
-          // Create features for each line
-          lines.forEach(line => {
-            const isBold = boldInterval && (level % (interval * boldInterval) === 0);
-            const normalized = maxElev > minElev ? (level - minElev) / (maxElev - minElev) : 0.5;
-            const color = getColorFromNormalized(normalized);
-            
-            features.push({
-              type: 'Feature',
-              geometry: {
-                type: 'LineString',
-                coordinates: line
-              },
-              properties: {
-                elevation: Math.round(level),
-                bold: isBold,
-                weight: isBold ? 2.5 : 1,
-                color: color
-              }
-            });
-          });
-        }
-      });
-      
-      if (features.length === 0) {
-        throw new Error('No contour lines generated');
-      }
-      
-      return {
-        type: 'FeatureCollection',
-        features: features,
-        properties: {
-          min_elevation: minElev,
-          max_elevation: maxElev
-        }
-      };
-    } catch (error) {
-      logError('Failed to generate contours from elevation API:', error);
-      return null;
-    }
-  }, [getColorFromNormalized]);
-  
-  // ========== SPECIALIZED CONTOUR RENDERING ==========
-  const renderContours = useCallback((geojson, forceVisible = null) => {
-    if (!mapInstanceRef.current || !geojson || !geojson.features) return;
-    
-    const map = mapInstanceRef.current;
     
     // Calculate min/max elevation for color normalization if not in properties
     if (!geojson.properties?.min_elevation || !geojson.properties?.max_elevation) {
@@ -1410,9 +1210,12 @@ const App = () => {
       // NEW APPROACH: Use OpenTopoMap contour tile overlay instead of generating from DEM
       // This provides pre-generated, real terrain contours
       const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
-      const [contoursRes, hydrologyRes] = await Promise.allSettled([
+      
+      // Fetch all layers in parallel
+      const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
         fetch(contourUrl),
-        fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`)
+        fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`),
+        fetch(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`)
       ]);
       
       // Process contours

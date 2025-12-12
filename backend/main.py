@@ -8,6 +8,7 @@ from contours import generate_contours
 from hydro import run_hydrology
 from sun import sun_path
 from ai import ask_ai
+from slope_aspect import generate_slope_aspect
 from fastapi.responses import Response
 import json
 
@@ -109,6 +110,28 @@ def sun_endpoint(lat: float, lon: float, date: str = "2025-01-01"):
 @app.post("/ai")
 async def ai_endpoint(q: str = Query(...)):
     return ask_ai(q)
+
+@app.get("/slope-aspect")
+def slope_aspect_endpoint(bbox: str):
+    """
+    Generate slope and aspect from DEM
+    
+    Args:
+        bbox: Bounding box "minx,miny,maxx,maxy"
+    """
+    return generate_slope_aspect(bbox)
+
+@app.get("/slope")
+def slope_endpoint(bbox: str):
+    """Get slope data only"""
+    data = generate_slope_aspect(bbox)
+    return data['slope']
+
+@app.get("/aspect")
+def aspect_endpoint(bbox: str):
+    """Get aspect data only"""
+    data = generate_slope_aspect(bbox)
+    return data['aspect']
 
 # Run server
 if __name__ == "__main__":
