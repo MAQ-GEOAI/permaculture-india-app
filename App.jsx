@@ -1262,7 +1262,7 @@ const App = () => {
           ? 'Network/CORS error' 
           : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
         logWarn(`Backend contours unavailable (${errorReason})`);
-        showToast('Backend unavailable. Real terrain contours require SRTM DEM processing on the server. Please check backend connection.', 'error');
+        showToast('⚠️ Backend not deployed! Deploy backend to Render.com to enable all features. See DEPLOY-BACKEND-NOW.md', 'error');
         
         // Remove any existing contour tiles or layers
         if (layerRefs.current.contourTiles && mapInstanceRef.current) {
