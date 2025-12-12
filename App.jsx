@@ -105,11 +105,17 @@ const App = () => {
     secondaryWindArea: null
   });
   
-  // Backend URL - Auto-detect production vs development
+  // Backend URL - Explicit configuration
+  // Priority: 1. Environment variable, 2. Production URL, 3. Localhost
   const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 
-    (window.location.hostname === 'localhost' 
+    (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
       ? 'http://localhost:8000' 
-      : 'https://permaculture-backend.onrender.com'); // Update with your actual backend URL
+      : 'https://permaculture-backend.onrender.com');
+  
+  // Log backend URL for debugging (only in development or if explicitly enabled)
+  if (import.meta.env.DEV || window.location.search.includes('debug=true')) {
+    console.log('🔗 Backend URL configured:', BACKEND_URL);
+  }
   
   // Basemap configurations for permaculture/GIS work
   const basemapConfigs = {
