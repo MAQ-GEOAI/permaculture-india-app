@@ -178,13 +178,6 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
         
         # Create features for each line
         for line in lines:
-        
-        # Determine if this is a bold contour
-        is_bold = False
-        if bold_interval:
-            level_index = int((level - min_level) / interval)
-            is_bold = (level_index % bold_interval == 0)
-        
             # Determine if this is a bold contour
             is_bold = False
             if bold_interval:
