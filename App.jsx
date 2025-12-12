@@ -1297,12 +1297,21 @@ const App = () => {
       
       log('All backend requests completed (some may have failed)');
       
-      // Process contours
-      // Check if request was successful (fulfilled and response ok)
+      // Process contours - CRITICAL: This must work!
+      log('Processing contours response...');
       const contoursSuccess = contoursRes.status === 'fulfilled' && contoursRes.value && contoursRes.value.ok;
       
       if (contoursSuccess) {
-        const contoursData = await contoursRes.value.json();
+        log('Contours request successful, parsing JSON...');
+        let contoursData;
+        try {
+          contoursData = await contoursRes.value.json();
+          log(`Contours data received: ${contoursData.features?.length || 0} features`);
+        } catch (jsonError) {
+          logError('Failed to parse contours JSON:', jsonError);
+          showToast('Failed to parse contours data from backend', 'error');
+          throw jsonError;
+        }
         
         // Remove any OpenTopoMap overlay tiles - we only want actual contour GeoJSON data
         if (layerRefs.current.contourTiles && mapInstanceRef.current) {
@@ -1316,15 +1325,23 @@ const App = () => {
         
         // Validate contours data
         const features = contoursData.features || [];
+        log(`Contours validation: ${features.length} features found`);
+        
         if (features.length > 0) {
-          // Use actual contour GeoJSON data - render as vector lines
+          // CRITICAL: Enable contours layer and render immediately
+          log('Rendering contours on map...');
           setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
-          setLayerVisibility(prev => ({ ...prev, contours: true }));
+          setLayerVisibility(prev => ({ ...prev, contours: true })); // Force enable
+          
+          // Render contours with forceVisible=true to ensure they appear
           renderContours(contoursData, true);
+          
           const count = features.length;
-          showToast(`Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
+          log(`✅ Contours rendered successfully: ${count} lines`);
+          showToast(`✅ Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
         } else {
-          showToast('No contours generated from backend.', 'warning');
+          logWarn('Backend returned empty contours array');
+          showToast('⚠️ Backend returned no contours. Check area size or DEM availability.', 'warning');
           // Clear any existing contours
           if (layerRefs.current.contours) {
             try {
@@ -1335,13 +1352,19 @@ const App = () => {
           setAnalysisLayers(prev => ({ ...prev, contours: null }));
         }
       } else {
-        // Backend failed - cannot generate real terrain contours without backend
-        // Real contours require SRTM DEM data processing which must be done server-side
+        // Backend failed - show detailed error
         const errorReason = contoursRes.status === 'rejected' 
-          ? 'Network/CORS error' 
+          ? contoursRes.reason?.message || 'Network/CORS error'
           : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
-        logWarn(`Backend contours unavailable (${errorReason})`);
-        showToast('⚠️ Backend not deployed! Deploy backend to Render.com to enable all features. See DEPLOY-BACKEND-NOW.md', 'error');
+        
+        logError(`❌ Backend contours failed: ${errorReason}`);
+        logError('Contours response details:', {
+          status: contoursRes.status,
+          value: contoursRes.value,
+          reason: contoursRes.reason
+        });
+        
+        showToast(`❌ Contours failed: ${errorReason}. Check backend at ${BACKEND_URL}`, 'error');
         
         // Remove any existing contour tiles or layers
         if (layerRefs.current.contourTiles && mapInstanceRef.current) {
@@ -1353,7 +1376,7 @@ const App = () => {
           layerRefs.current.contourTiles = null;
         }
         
-        // Clear contour data - we cannot generate real contours client-side
+        // Clear contour data
         if (layerRefs.current.contours) {
           try {
             mapInstanceRef.current.removeLayer(layerRefs.current.contours);
@@ -1361,7 +1384,8 @@ const App = () => {
           layerRefs.current.contours = null;
         }
         setAnalysisLayers(prev => ({ ...prev, contours: null }));
-        setLayerVisibility(prev => ({ ...prev, contours: false }));
+        // Keep contours enabled in UI so user can see it's supposed to be there
+        setLayerVisibility(prev => ({ ...prev, contours: true }));
       }
       
       // Process hydrology
