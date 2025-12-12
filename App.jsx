@@ -2543,11 +2543,24 @@ const App = () => {
         await prepareForExport();
         
         // Additional wait for rendering to stabilize
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Get actual dimensions
-        const mapWidth = mapContainer.offsetWidth || window.innerWidth;
-        const mapHeight = mapContainer.offsetHeight || window.innerHeight;
+        // Get actual dimensions - ensure we have valid dimensions
+        let mapWidth = mapContainer.offsetWidth;
+        let mapHeight = mapContainer.offsetHeight;
+        
+        if (!mapWidth || mapWidth === 0) {
+          mapWidth = mapContainer.clientWidth || window.innerWidth;
+        }
+        if (!mapHeight || mapHeight === 0) {
+          mapHeight = mapContainer.clientHeight || window.innerHeight;
+        }
+        
+        // Fallback to window dimensions if still invalid
+        if (!mapWidth || mapWidth === 0) mapWidth = window.innerWidth;
+        if (!mapHeight || mapHeight === 0) mapHeight = window.innerHeight;
+        
+        console.log('Export dimensions:', { mapWidth, mapHeight, offsetWidth: mapContainer.offsetWidth, offsetHeight: mapContainer.offsetHeight });
         
         showToast('Capturing map...', 'info');
         
@@ -2556,18 +2569,33 @@ const App = () => {
         mapContainer.style.display = 'block';
         mapContainer.style.opacity = '1';
         mapContainer.style.position = 'relative';
+        mapContainer.style.width = mapWidth + 'px';
+        mapContainer.style.height = mapHeight + 'px';
+        mapContainer.style.overflow = 'visible';
         
-        // Force map to redraw
+        // Force map to redraw and ensure tiles are loaded
         if (mapInstanceRef.current) {
           mapInstanceRef.current.invalidateSize();
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Wait for map to update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Check if tiles are loaded
+          const tiles = mapContainer.querySelectorAll('img.leaflet-tile');
+          const loadedTiles = Array.from(tiles).filter(tile => tile.complete && tile.naturalWidth > 0);
+          console.log(`Tiles loaded: ${loadedTiles.length}/${tiles.length}`);
+          
+          // Wait a bit more if tiles are still loading
+          if (loadedTiles.length < tiles.length && tiles.length > 0) {
+            showToast('Waiting for map tiles to load...', 'info');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         }
         
         // Capture with better options for Leaflet maps
         const canvas = await html2canvas(mapContainer, {
           backgroundColor: '#ffffff', // White background instead of transparent
           useCORS: true,
-          logging: true, // Enable logging to debug
+          logging: false, // Disable logging for production
           width: mapWidth,
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
@@ -2583,9 +2611,23 @@ const App = () => {
               (element.style && element.style.display === 'none')
             );
           },
-          onclone: (clonedDoc) => {
-            // Ensure map container is visible in clone
-            const clonedMap = clonedDoc.getElementById('leaflet-map-container');
+          onclone: async (clonedDoc) => {
+            // Wait for images to load in clone first
+            let clonedMap = clonedDoc.getElementById('leaflet-map-container');
+            if (clonedMap) {
+              const images = clonedMap.querySelectorAll('img');
+              await Promise.all(Array.from(images).map(img => {
+                if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                return new Promise((resolve) => {
+                  img.onload = resolve;
+                  img.onerror = resolve; // Continue even if image fails
+                  setTimeout(resolve, 3000); // Timeout after 3s
+                });
+              }));
+            }
+            
+            // Now ensure map container is visible in clone
+            clonedMap = clonedDoc.getElementById('leaflet-map-container');
             if (clonedMap) {
               clonedMap.style.visibility = 'visible';
               clonedMap.style.display = 'block';
@@ -2784,11 +2826,24 @@ const App = () => {
         await prepareForExport();
         
         // Additional wait for rendering to stabilize
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
         
-        // Get actual map container dimensions
-        const mapWidth = mapContainer.offsetWidth || window.innerWidth;
-        const mapHeight = mapContainer.offsetHeight || window.innerHeight;
+        // Get actual map container dimensions - ensure we have valid dimensions
+        let mapWidth = mapContainer.offsetWidth;
+        let mapHeight = mapContainer.offsetHeight;
+        
+        if (!mapWidth || mapWidth === 0) {
+          mapWidth = mapContainer.clientWidth || window.innerWidth;
+        }
+        if (!mapHeight || mapHeight === 0) {
+          mapHeight = mapContainer.clientHeight || window.innerHeight;
+        }
+        
+        // Fallback to window dimensions if still invalid
+        if (!mapWidth || mapWidth === 0) mapWidth = window.innerWidth;
+        if (!mapHeight || mapHeight === 0) mapHeight = window.innerHeight;
+        
+        console.log('PDF Export dimensions:', { mapWidth, mapHeight });
         
         showToast('Capturing map...', 'info');
         
@@ -2797,18 +2852,33 @@ const App = () => {
         mapContainer.style.display = 'block';
         mapContainer.style.opacity = '1';
         mapContainer.style.position = 'relative';
+        mapContainer.style.width = mapWidth + 'px';
+        mapContainer.style.height = mapHeight + 'px';
+        mapContainer.style.overflow = 'visible';
         
-        // Force map to redraw
+        // Force map to redraw and ensure tiles are loaded
         if (mapInstanceRef.current) {
           mapInstanceRef.current.invalidateSize();
-          await new Promise(resolve => setTimeout(resolve, 500));
+          // Wait for map to update
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Check if tiles are loaded
+          const tiles = mapContainer.querySelectorAll('img.leaflet-tile');
+          const loadedTiles = Array.from(tiles).filter(tile => tile.complete && tile.naturalWidth > 0);
+          console.log(`PDF Tiles loaded: ${loadedTiles.length}/${tiles.length}`);
+          
+          // Wait a bit more if tiles are still loading
+          if (loadedTiles.length < tiles.length && tiles.length > 0) {
+            showToast('Waiting for map tiles to load...', 'info');
+            await new Promise(resolve => setTimeout(resolve, 2000));
+          }
         }
         
         // Capture the map with better options for Leaflet
         const canvas = await html2canvas(mapContainer, {
           backgroundColor: '#ffffff', // White background instead of transparent
           useCORS: true,
-          logging: true, // Enable logging to debug
+          logging: false, // Disable logging for production
           width: mapWidth,
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
@@ -2816,9 +2886,23 @@ const App = () => {
           foreignObjectRendering: false, // Better for Leaflet
           removeContainer: false,
           imageTimeout: 60000, // Longer timeout for tiles
-          onclone: (clonedDoc) => {
-            // Ensure map container is visible in clone
-            const clonedMap = clonedDoc.getElementById('leaflet-map-container');
+          onclone: async (clonedDoc) => {
+            // Wait for images to load in clone first
+            let clonedMap = clonedDoc.getElementById('leaflet-map-container');
+            if (clonedMap) {
+              const images = clonedMap.querySelectorAll('img');
+              await Promise.all(Array.from(images).map(img => {
+                if (img.complete && img.naturalWidth > 0) return Promise.resolve();
+                return new Promise((resolve) => {
+                  img.onload = resolve;
+                  img.onerror = resolve; // Continue even if image fails
+                  setTimeout(resolve, 3000); // Timeout after 3s
+                });
+              }));
+            }
+            
+            // Now ensure map container is visible in clone
+            clonedMap = clonedDoc.getElementById('leaflet-map-container');
             if (clonedMap) {
               clonedMap.style.visibility = 'visible';
               clonedMap.style.display = 'block';
