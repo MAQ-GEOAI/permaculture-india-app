@@ -1449,12 +1449,23 @@ const App = () => {
       const centerLng = centerCoords.reduce((sum, c) => sum + c[0], 0) / centerCoords.length;
       const centerLat = centerCoords.reduce((sum, c) => sum + c[1], 0) / centerCoords.length;
       
-      // Fetch sun path (with timeout)
+      // Fetch sun path (with timeout) - non-blocking
       try {
-        const sunRes = await fetchWithTimeout(`${BACKEND_URL}/sun?lat=${centerLat}&lon=${centerLng}`, 30000);
+        const sunRes = await fetchWithTimeout(`${BACKEND_URL}/sun?lat=${centerLat}&lon=${centerLng}&date=2025-01-01`, 30000);
         if (sunRes.ok) {
           const sunData = await sunRes.json();
-          setAnalysisLayers(prev => ({ ...prev, sunPath: sunData }));
+          if (sunData && !sunData.error) {
+            setAnalysisLayers(prev => ({ ...prev, sunPath: sunData }));
+          } else {
+            logWarn('Sun path data has error:', sunData.error);
+          }
+        } else {
+          logWarn(`Sun path request failed: HTTP ${sunRes.status}`);
+        }
+      } catch (sunError) {
+        logWarn('Sun path request failed (non-critical):', sunError);
+        // Continue - sun path is not critical for main analysis
+      }
           
           // Beautiful sun path visualization
           if (sunData.sun_path && Array.isArray(sunData.sun_path)) {

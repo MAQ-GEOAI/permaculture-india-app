@@ -14,12 +14,14 @@ import json
 
 app = FastAPI(title="Permaculture India – PRO Backend")
 
-# Allow CORS for frontend (GitHub Pages / Netlify)
+# Allow CORS for frontend - comprehensive configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # Allow all origins for now
+    allow_credentials=True,
+    allow_methods=["*"],  # Allow all methods
+    allow_headers=["*"],  # Allow all headers
+    expose_headers=["*"],  # Expose all headers
 )
 
 # ---- ROUTES -----
@@ -46,7 +48,15 @@ def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
         interval: Contour interval in meters (0.5, 1, 2, 5, 10, 20, 50, 100)
         bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour)
     """
-    return generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+    try:
+        return generate_contours(bbox, interval=interval, bold_interval=bold_interval)
+    except Exception as e:
+        print(f"[CONTOURS ENDPOINT] Error: {e}")
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "error": str(e)
+        }
 
 @app.get("/contours/export")
 def contour_export_endpoint(bbox: str, interval: float = 5, bold_interval: int = None, format: str = "geojson"):
@@ -101,11 +111,32 @@ def contour_export_endpoint(bbox: str, interval: float = 5, bold_interval: int =
 
 @app.get("/hydrology")
 def hydro_endpoint(bbox: str):
-    return run_hydrology(bbox)
+    """Generate hydrology data (catchments, flow accumulation, natural ponds)"""
+    try:
+        return run_hydrology(bbox)
+    except Exception as e:
+        print(f"[HYDRO ENDPOINT] Error: {e}")
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "error": str(e)
+        }
 
 @app.get("/sun")
 def sun_endpoint(lat: float, lon: float, date: str = "2025-01-01"):
-    return sun_path(lat, lon, date)
+    """Calculate sun path for given location and date"""
+    try:
+        return sun_path(lat, lon, date)
+    except Exception as e:
+        print(f"[SUN ENDPOINT] Error: {e}")
+        # Return error response that won't break frontend
+        return {
+            "lat": float(lat),
+            "lon": float(lon),
+            "date": date,
+            "sun_path": [],
+            "error": str(e)
+        }
 
 @app.post("/ai")
 async def ai_endpoint(q: str = Query(...)):
@@ -119,7 +150,15 @@ def slope_aspect_endpoint(bbox: str):
     Args:
         bbox: Bounding box "minx,miny,maxx,maxy"
     """
-    return generate_slope_aspect(bbox)
+    try:
+        return generate_slope_aspect(bbox)
+    except Exception as e:
+        print(f"[SLOPE-ASPECT ENDPOINT] Error: {e}")
+        return {
+            "slope": {"type": "FeatureCollection", "features": []},
+            "aspect": {"type": "FeatureCollection", "features": []},
+            "error": str(e)
+        }
 
 @app.get("/slope")
 def slope_endpoint(bbox: str):
