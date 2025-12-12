@@ -3,9 +3,14 @@
 import requests
 import numpy as np
 import json
-from scipy.interpolate import griddata
-from scipy.ndimage import gaussian_filter
 import math
+
+# Optional scipy imports (for smoothing if available)
+try:
+    from scipy.ndimage import gaussian_filter
+    SCIPY_AVAILABLE = True
+except ImportError:
+    SCIPY_AVAILABLE = False
 
 def generate_contours_fast(bbox, interval=5, bold_interval=None):
     """
@@ -84,23 +89,20 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
     
     print(f"[CONTOURS_FAST] Received {received_count}/{len(locations)} elevation points")
     
-    # Fill NaN values with interpolation
+    # Fill NaN values with simple interpolation (mean of neighbors)
     valid_mask = ~np.isnan(elevation_grid)
     if np.sum(valid_mask) < 10:
         raise Exception("Insufficient valid elevation data")
     
-    # Get valid points for interpolation
-    valid_lats, valid_lons = np.meshgrid(lats, lons, indexing='ij')
-    valid_points = np.column_stack([valid_lats[valid_mask], valid_lons[valid_mask]])
-    valid_elevations = elevation_grid[valid_mask]
+    # Simple fill: use mean of valid data for NaN values
+    mean_elev = np.nanmean(elevation_grid)
+    elevation_grid[np.isnan(elevation_grid)] = mean_elev
     
-    # Interpolate missing values
-    all_points = np.column_stack([valid_lats.flatten(), valid_lons.flatten()])
-    interpolated = griddata(valid_points, valid_elevations, all_points, method='cubic', fill_value=np.nanmean(valid_elevations))
-    elevation_grid = interpolated.reshape(elevation_grid.shape)
-    
-    # Smooth the data slightly
-    elevation_grid = gaussian_filter(elevation_grid, sigma=0.5)
+    # Optional: smooth the data slightly if scipy is available
+    try:
+        elevation_grid = gaussian_filter(elevation_grid, sigma=0.5)
+    except:
+        pass  # Skip smoothing if not available
     
     # Calculate min/max for contour levels
     min_elev = np.nanmin(elevation_grid)
@@ -113,9 +115,8 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
     
     print(f"[CONTOURS_FAST] Generating contours at {len(levels)} levels (elevation range: {min_elev:.1f}m - {max_elev:.1f}m)")
     
-    # Generate contours using marching squares algorithm (simplified)
-    from scipy import ndimage
-    
+    # Generate contours using simplified approach
+    # For each contour level, find points where elevation crosses the level
     features = []
     min_elev_used = float(min_elev)
     max_elev_used = float(max_elev)
@@ -124,30 +125,59 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
         if level < min_elev or level > max_elev:
             continue
         
-        # Create binary mask for this contour level
-        mask = elevation_grid >= level
+        # Find points near this contour level (within interval/2)
+        threshold = interval / 2
+        contour_points = []
         
-        # Find contours using edge detection
-        edges = np.zeros_like(mask, dtype=bool)
-        edges[:-1, :] |= mask[:-1, :] != mask[1:, :]  # Vertical edges
-        edges[:, :-1] |= mask[:, :-1] != mask[:, 1:]  # Horizontal edges
+        for i in range(len(lats)):
+            for j in range(len(lons)):
+                elev = elevation_grid[i, j]
+                if abs(elev - level) < threshold:
+                    lat = float(lats[i])
+                    lon = float(lons[j])
+                    contour_points.append([lon, lat, float(level)])
         
-        # Extract contour coordinates
-        edge_coords = np.argwhere(edges)
-        if len(edge_coords) < 3:  # Need at least 3 points for a line
+        if len(contour_points) < 3:
             continue
         
-        # Group points into continuous lines (simplified - just create one feature per level)
-        # Convert grid indices to lat/lon
-        contour_coords = []
-        for lat_idx, lon_idx in edge_coords:
-            lat = float(lats[lat_idx])
-            lon = float(lons[lon_idx])
-            elev = float(elevation_grid[lat_idx, lon_idx])
-            contour_coords.append([lon, lat, elev])
+        # Sort points to create continuous lines (simplified - by proximity)
+        # Group nearby points into lines
+        lines = []
+        used = set()
         
-        if len(contour_coords) < 3:
-            continue
+        for start_idx, start_point in enumerate(contour_points):
+            if start_idx in used:
+                continue
+            
+            line = [start_point]
+            used.add(start_idx)
+            current = start_point
+            
+            # Find nearest unused point
+            while True:
+                nearest_idx = None
+                nearest_dist = float('inf')
+                
+                for idx, point in enumerate(contour_points):
+                    if idx in used:
+                        continue
+                    dist = math.sqrt((point[0] - current[0])**2 + (point[1] - current[1])**2)
+                    if dist < nearest_dist and dist < 0.01:  # ~1km max distance
+                        nearest_dist = dist
+                        nearest_idx = idx
+                
+                if nearest_idx is None:
+                    break
+                
+                line.append(contour_points[nearest_idx])
+                used.add(nearest_idx)
+                current = contour_points[nearest_idx]
+            
+            if len(line) >= 3:
+                lines.append(line)
+        
+        # Create features for each line
+        for line in lines:
         
         # Determine if this is a bold contour
         is_bold = False
@@ -155,27 +185,33 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
             level_index = int((level - min_level) / interval)
             is_bold = (level_index % bold_interval == 0)
         
-        # Create feature
-        feature = {
-            "type": "Feature",
-            "geometry": {
-                "type": "LineString",
-                "coordinates": [[c[0], c[1], c[2]] for c in contour_coords]
-            },
-            "properties": {
-                "elevation": float(level),
-                "bold": is_bold,
-                "weight": 3 if is_bold else 2,
-                "name": f"{int(level)}m contour",
-                "label": f"{int(level)}m"
+            # Determine if this is a bold contour
+            is_bold = False
+            if bold_interval:
+                level_index = int((level - min_level) / interval)
+                is_bold = (level_index % bold_interval == 0)
+            
+            # Create feature
+            feature = {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[p[0], p[1], p[2]] for p in line]
+                },
+                "properties": {
+                    "elevation": float(level),
+                    "bold": is_bold,
+                    "weight": 3 if is_bold else 2,
+                    "name": f"{int(level)}m contour",
+                    "label": f"{int(level)}m"
+                }
             }
-        }
-        
-        # Add color based on elevation
-        normalized = (level - min_elev_used) / (max_elev_used - min_elev_used) if max_elev_used > min_elev_used else 0.5
-        feature['properties']['color'] = get_contour_color_fast(normalized)
-        
-        features.append(feature)
+            
+            # Add color based on elevation
+            normalized = (level - min_elev_used) / (max_elev_used - min_elev_used) if max_elev_used > min_elev_used else 0.5
+            feature['properties']['color'] = get_contour_color_fast(normalized)
+            
+            features.append(feature)
     
     if len(features) == 0:
         raise Exception("No contours generated")
