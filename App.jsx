@@ -1522,6 +1522,61 @@ const App = () => {
         logWarn('Sun path analysis failed:', err);
       }
       
+      // Process slope and aspect
+      if (slopeAspectRes.status === 'fulfilled' && slopeAspectRes.value.ok) {
+        try {
+          const slopeAspectData = await slopeAspectRes.value.json();
+          
+          if (slopeAspectData.slope && slopeAspectData.slope.features && slopeAspectData.slope.features.length > 0) {
+            setAnalysisLayers(prev => ({ ...prev, slope: slopeAspectData.slope }));
+            // Render slope as colored circle markers
+            const slopeLayer = L.geoJSON(slopeAspectData.slope, {
+              pointToLayer: (feature, latlng) => {
+                const props = feature.properties || {};
+                return L.circleMarker(latlng, {
+                  radius: 5,
+                  fillColor: props.color || '#90EE90',
+                  color: props.color || '#90EE90',
+                  weight: 1,
+                  opacity: 0.8,
+                  fillOpacity: 0.6
+                }).bindPopup(`Slope: ${props.slope}°<br>Category: ${props.category}`);
+              }
+            });
+            layerRefs.current.slope = slopeLayer;
+            if (layerVisibility.slope && mapInstanceRef.current) {
+              slopeLayer.addTo(mapInstanceRef.current);
+            }
+            showToast(`Slope analysis loaded: ${slopeAspectData.slope.features.length} points`, 'success');
+          }
+          
+          if (slopeAspectData.aspect && slopeAspectData.aspect.features && slopeAspectData.aspect.features.length > 0) {
+            setAnalysisLayers(prev => ({ ...prev, aspect: slopeAspectData.aspect }));
+            // Render aspect as colored circle markers
+            const aspectLayer = L.geoJSON(slopeAspectData.aspect, {
+              pointToLayer: (feature, latlng) => {
+                const props = feature.properties || {};
+                return L.circleMarker(latlng, {
+                  radius: 5,
+                  fillColor: props.color || '#FF0000',
+                  color: props.color || '#FF0000',
+                  weight: 1,
+                  opacity: 0.8,
+                  fillOpacity: 0.6
+                }).bindPopup(`Aspect: ${props.aspect}°<br>Direction: ${props.direction}`);
+              }
+            });
+            layerRefs.current.aspect = aspectLayer;
+            if (layerVisibility.aspect && mapInstanceRef.current) {
+              aspectLayer.addTo(mapInstanceRef.current);
+            }
+            showToast(`Aspect analysis loaded: ${slopeAspectData.aspect.features.length} points`, 'success');
+          }
+        } catch (err) {
+          logWarn('Slope/aspect processing failed:', err);
+        }
+      }
+      
       // Generate seasonal sun paths (winter/summer sunrise/sunset)
       generateSeasonalSunPaths(centerLat, centerLng);
       
