@@ -1211,11 +1211,22 @@ const App = () => {
       // This provides pre-generated, real terrain contours
       const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
       
-      // Fetch all layers in parallel
+      // Helper function to add timeout to fetch
+      const fetchWithTimeout = (url, timeout = 60000) => {
+        return Promise.race([
+          fetch(url),
+          new Promise((_, reject) => 
+            setTimeout(() => reject(new Error(`Request timeout after ${timeout}ms`)), timeout)
+          )
+        ]);
+      };
+      
+      // Fetch all layers in parallel with timeouts
+      showToast('Fetching terrain data from backend...', 'info');
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetch(contourUrl),
-        fetch(`${BACKEND_URL}/hydrology?bbox=${bbox}`),
-        fetch(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`)
+        fetchWithTimeout(contourUrl, 120000), // 2 minutes for contours (DEM processing takes time)
+        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 120000), // 2 minutes for hydrology
+        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 120000) // 2 minutes for slope/aspect
       ]);
       
       // Process contours
@@ -1416,9 +1427,9 @@ const App = () => {
       const centerLng = centerCoords.reduce((sum, c) => sum + c[0], 0) / centerCoords.length;
       const centerLat = centerCoords.reduce((sum, c) => sum + c[1], 0) / centerCoords.length;
       
-      // Fetch sun path
+      // Fetch sun path (with timeout)
       try {
-        const sunRes = await fetch(`${BACKEND_URL}/sun?lat=${centerLat}&lon=${centerLng}`);
+        const sunRes = await fetchWithTimeout(`${BACKEND_URL}/sun?lat=${centerLat}&lon=${centerLng}`, 30000);
         if (sunRes.ok) {
           const sunData = await sunRes.json();
           setAnalysisLayers(prev => ({ ...prev, sunPath: sunData }));
