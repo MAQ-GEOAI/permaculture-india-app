@@ -1,22 +1,19 @@
 # contours_fast.py – Fast contour generation using OpenElevation API
-# This is MUCH faster than downloading DEM tiles - uses direct elevation API
+# SIMPLIFIED VERSION - Fast and reliable for production
 import requests
 import numpy as np
 import json
 import math
+import time
 
-# Scipy imports for proper contouring
+# Optional scipy imports
 try:
     from scipy.ndimage import gaussian_filter
     from scipy.interpolate import griddata
-    from matplotlib import pyplot as plt
-    from matplotlib import _contour as _cntr
     SCIPY_AVAILABLE = True
-    MATPLOTLIB_AVAILABLE = True
 except ImportError:
     SCIPY_AVAILABLE = False
-    MATPLOTLIB_AVAILABLE = False
-    print("[CONTOURS_FAST] Warning: scipy/matplotlib not available, using simplified method")
+    print("[CONTOURS_FAST] scipy not available, using basic interpolation")
 
 def generate_contours_fast(bbox, interval=5, bold_interval=None):
     """
@@ -30,25 +27,19 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
     """
     minx, miny, maxx, maxy = map(float, bbox.split(","))
     
-    # Calculate grid resolution based on area size
+    # SIMPLIFIED: Use fixed grid size for speed (adjust based on area)
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111  # Approximate km²
-    if area_km2 > 100:  # Large area - use coarser grid
-        grid_size = 50  # ~50m spacing
+    
+    # Use smaller grid for faster processing - limit to 200 points max
+    if area_km2 > 50:  # Large area
+        num_points = 15  # 15x15 = 225 points
     elif area_km2 > 10:  # Medium area
-        grid_size = 30  # ~30m spacing
+        num_points = 20  # 20x20 = 400 points
     else:  # Small area
-        grid_size = 20  # ~20m spacing
+        num_points = 25  # 25x25 = 625 points
     
-    # Create sampling grid
-    num_points_x = max(20, int((maxx - minx) * 111 * 1000 / grid_size))  # ~grid_size meters apart
-    num_points_y = max(20, int((maxy - miny) * 111 * 1000 / grid_size))
-    
-    # Limit to reasonable number of points (API can handle ~1000)
-    max_points = 500
-    if num_points_x * num_points_y > max_points:
-        scale = math.sqrt(max_points / (num_points_x * num_points_y))
-        num_points_x = max(10, int(num_points_x * scale))
-        num_points_y = max(10, int(num_points_y * scale))
+    num_points_x = num_points
+    num_points_y = num_points
     
     lons = np.linspace(minx, maxx, num_points_x)
     lats = np.linspace(miny, maxy, num_points_y)
@@ -148,135 +139,124 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
     
     print(f"[CONTOURS_FAST] Generating contours at {len(levels)} levels (elevation range: {min_elev:.1f}m - {max_elev:.1f}m)")
     
-    # Generate contours using proper algorithm
+    # SIMPLIFIED CONTOUR GENERATION - Fast and reliable
+    print(f"[CONTOURS_FAST] Generating contours using marching squares algorithm...")
+    start_contour = time.time()
+    
     features = []
     min_elev_used = float(min_elev)
     max_elev_used = float(max_elev)
     
-    # Use matplotlib's contour algorithm if available (most accurate)
-    if MATPLOTLIB_AVAILABLE:
-        try:
-            # Create coordinate grids
-            lon_grid, lat_grid = np.meshgrid(lons, lats)
-            
-            # Use matplotlib's contour generator (CONREC algorithm)
-            contour_generator = _cntr.QuadContourGenerator(
-                lon_grid, lat_grid, elevation_grid, None, True, 0
-            )
-            
-            for level in levels:
-                if level < min_elev or level > max_elev:
+    # Use marching squares algorithm (simple and fast)
+    for level in levels:
+        if level < min_elev or level > max_elev:
+            continue
+        
+        # Find contour points using marching squares
+        contour_segments = []
+        
+        for i in range(len(lats) - 1):
+            for j in range(len(lons) - 1):
+                # Get cell corners
+                z00 = elevation_grid[i, j]
+                z01 = elevation_grid[i, j+1]
+                z10 = elevation_grid[i+1, j]
+                z11 = elevation_grid[i+1, j+1]
+                
+                # Skip if any corner is NaN
+                if np.isnan(z00) or np.isnan(z01) or np.isnan(z10) or np.isnan(z11):
                     continue
                 
-                # Get contour paths for this level
-                paths = contour_generator.create_contour(level)
-                
-                if not paths:
+                # Check if contour crosses this cell
+                if not (min(z00, z01, z10, z11) <= level <= max(z00, z01, z10, z11)):
                     continue
                 
-                # Determine if this is a bold contour
-                is_bold = False
-                if bold_interval:
-                    level_index = int((level - min_level) / interval)
-                    is_bold = (level_index % bold_interval == 0)
+                # Cell coordinates
+                lat0, lat1 = float(lats[i]), float(lats[i+1])
+                lon0, lon1 = float(lons[j]), float(lons[j+1])
                 
-                # Create features for each contour path
-                for path in paths:
-                    if len(path) < 3:
-                        continue
-                    
-                    # Convert path to coordinates (path is array of [x, y] pairs)
-                    coords = []
-                    for i in range(len(path)):
-                        lon = float(path[i, 0])
-                        lat = float(path[i, 1])
-                        # Ensure coordinates are within bbox
-                        if minx <= lon <= maxx and miny <= lat <= maxy:
-                            coords.append([lon, lat, float(level)])
-                    
-                    if len(coords) < 3:
-                        continue
-                    
-                    feature = {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "LineString",
-                            "coordinates": coords
-                        },
-                        "properties": {
-                            "elevation": float(level),
-                            "bold": is_bold,
-                            "weight": 3 if is_bold else 2,
-                            "name": f"{int(level)}m contour",
-                            "label": f"{int(level)}m"
-                        }
-                    }
-                    
-                    # Add color based on elevation
-                    normalized = (level - min_elev_used) / (max_elev_used - min_elev_used) if max_elev_used > min_elev_used else 0.5
-                    feature['properties']['color'] = get_contour_color_fast(normalized)
-                    
-                    features.append(feature)
-            
-            print(f"[CONTOURS_FAST] Generated {len(features)} contour features using matplotlib CONREC algorithm")
-            
-        except Exception as e:
-            print(f"[CONTOURS_FAST] Matplotlib contouring failed: {e}, using fallback method")
-            MATPLOTLIB_AVAILABLE = False
-    
-    # Fallback: Use simplified method if matplotlib not available
-    if not MATPLOTLIB_AVAILABLE or len(features) == 0:
-        print(f"[CONTOURS_FAST] Using simplified contour generation method")
-        for level in levels:
-            if level < min_elev or level > max_elev:
+                # Interpolate crossing points on edges
+                points = []
+                
+                # Top edge
+                if (z00 <= level <= z01) or (z01 <= level <= z00):
+                    if abs(z01 - z00) > 0.01:
+                        t = (level - z00) / (z01 - z00)
+                        points.append([lon0 + t * (lon1 - lon0), lat0, float(level)])
+                
+                # Right edge
+                if (z01 <= level <= z11) or (z11 <= level <= z01):
+                    if abs(z11 - z01) > 0.01:
+                        t = (level - z01) / (z11 - z01)
+                        points.append([lon1, lat0 + t * (lat1 - lat0), float(level)])
+                
+                # Bottom edge
+                if (z10 <= level <= z11) or (z11 <= level <= z10):
+                    if abs(z11 - z10) > 0.01:
+                        t = (level - z10) / (z11 - z10)
+                        points.append([lon0 + t * (lon1 - lon0), lat1, float(level)])
+                
+                # Left edge
+                if (z00 <= level <= z10) or (z10 <= level <= z00):
+                    if abs(z10 - z00) > 0.01:
+                        t = (level - z00) / (z10 - z00)
+                        points.append([lon0, lat0 + t * (lat1 - lat0), float(level)])
+                
+                # Add segment if we have 2 points
+                if len(points) >= 2:
+                    contour_segments.append(points[0])
+                    contour_segments.append(points[1])
+        
+        if len(contour_segments) < 3:
+            continue
+        
+        # Group segments into continuous lines
+        lines = []
+        used = set()
+        
+        for start_idx in range(len(contour_segments)):
+            if start_idx in used:
                 continue
             
-            # Use edge detection to find contour lines
-            # Create binary mask for this level
-            mask = elevation_grid >= level
+            line = [contour_segments[start_idx]]
+            used.add(start_idx)
+            current = contour_segments[start_idx]
             
-            # Find edges (where elevation crosses the level)
-            edges = []
-            for i in range(len(lats) - 1):
-                for j in range(len(lons) - 1):
-                    # Check all four edges of this cell
-                    cell_values = [
-                        elevation_grid[i, j],
-                        elevation_grid[i, j+1],
-                        elevation_grid[i+1, j],
-                        elevation_grid[i+1, j+1]
-                    ]
-                    
-                    # Check if level crosses any edge
-                    if (min(cell_values) <= level <= max(cell_values)):
-                        # Interpolate crossing point
-                        lat1, lat2 = float(lats[i]), float(lats[i+1])
-                        lon1, lon2 = float(lons[j]), float(lons[j+1])
-                        
-                        # Simple interpolation
-                        if abs(cell_values[0] - cell_values[1]) > 0.1:
-                            t = (level - cell_values[0]) / (cell_values[1] - cell_values[0])
-                            edges.append([lon1 + t * (lon2 - lon1), lat1, float(level)])
-                        
-                        if abs(cell_values[0] - cell_values[2]) > 0.1:
-                            t = (level - cell_values[0]) / (cell_values[2] - cell_values[0])
-                            edges.append([lon1, lat1 + t * (lat2 - lat1), float(level)])
+            # Connect nearest points
+            while True:
+                nearest_idx = None
+                nearest_dist = float('inf')
+                
+                for idx, point in enumerate(contour_segments):
+                    if idx in used:
+                        continue
+                    dist = math.sqrt((point[0] - current[0])**2 + (point[1] - current[1])**2)
+                    if dist < nearest_dist and dist < 0.005:  # ~500m max
+                        nearest_dist = dist
+                        nearest_idx = idx
+                
+                if nearest_idx is None:
+                    break
+                
+                line.append(contour_segments[nearest_idx])
+                used.add(nearest_idx)
+                current = contour_segments[nearest_idx]
             
-            if len(edges) < 3:
-                continue
-            
-            # Group edges into lines (simplified)
-            is_bold = False
-            if bold_interval:
-                level_index = int((level - min_level) / interval)
-                is_bold = (level_index % bold_interval == 0)
-            
-            # Create feature from edges
+            if len(line) >= 3:
+                lines.append(line)
+        
+        # Create features
+        is_bold = False
+        if bold_interval:
+            level_index = int((level - min_level) / interval)
+            is_bold = (level_index % bold_interval == 0)
+        
+        for line in lines:
             feature = {
                 "type": "Feature",
                 "geometry": {
                     "type": "LineString",
-                    "coordinates": edges[:100]  # Limit to avoid too many points
+                    "coordinates": line
                 },
                 "properties": {
                     "elevation": float(level),
@@ -291,6 +271,9 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
             feature['properties']['color'] = get_contour_color_fast(normalized)
             
             features.append(feature)
+    
+    contour_time = time.time() - start_contour
+    print(f"[CONTOURS_FAST] Contour generation completed in {contour_time:.2f}s")
     
     if len(features) == 0:
         raise Exception("No contours generated")
