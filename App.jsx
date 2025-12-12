@@ -2551,16 +2551,28 @@ const App = () => {
         
         showToast('Capturing map...', 'info');
         
+        // Ensure map container is visible and has proper dimensions
+        mapContainer.style.visibility = 'visible';
+        mapContainer.style.display = 'block';
+        mapContainer.style.opacity = '1';
+        mapContainer.style.position = 'relative';
+        
+        // Force map to redraw
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
         // Capture with better options for Leaflet maps
         const canvas = await html2canvas(mapContainer, {
-          backgroundColor: 'transparent',
+          backgroundColor: '#ffffff', // White background instead of transparent
           useCORS: true,
-          logging: false,
+          logging: true, // Enable logging to debug
           width: mapWidth,
           height: mapHeight,
-          scale: 2, // Higher scale for better quality
+          scale: 1, // Use scale 1 to avoid issues
           allowTaint: true,
-          foreignObjectRendering: true, // Enable for better label rendering
+          foreignObjectRendering: false, // Better for Leaflet
           removeContainer: false,
           imageTimeout: 60000, // Longer timeout for tiles
           proxy: undefined,
@@ -2577,7 +2589,7 @@ const App = () => {
             if (clonedMap) {
               clonedMap.style.visibility = 'visible';
               clonedMap.style.display = 'block';
-              clonedMap.style.position = 'absolute';
+              clonedMap.style.position = 'relative';
               clonedMap.style.top = '0';
               clonedMap.style.left = '0';
               clonedMap.style.width = mapWidth + 'px';
@@ -2586,18 +2598,29 @@ const App = () => {
               clonedMap.style.padding = '0';
               clonedMap.style.transform = 'none';
               clonedMap.style.zIndex = '1';
-              clonedMap.style.backgroundColor = 'transparent';
+              clonedMap.style.backgroundColor = '#ffffff';
+              clonedMap.style.overflow = 'visible';
               
               // Fix Leaflet map pane positioning
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
               if (leafletPane) {
-                leafletPane.style.position = 'absolute';
+                leafletPane.style.position = 'relative';
                 leafletPane.style.top = '0';
                 leafletPane.style.left = '0';
                 leafletPane.style.width = '100%';
                 leafletPane.style.height = '100%';
                 leafletPane.style.zIndex = '1';
+                leafletPane.style.visibility = 'visible';
+                leafletPane.style.display = 'block';
               }
+              
+              // Ensure all Leaflet panes are visible
+              const allPanes = clonedMap.querySelectorAll('.leaflet-pane');
+              allPanes.forEach((pane) => {
+                pane.style.visibility = 'visible';
+                pane.style.display = 'block';
+                pane.style.opacity = '1';
+              });
               
               // CRITICAL: Ensure satellite basemap tiles are visible and prioritized
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
@@ -2684,25 +2707,21 @@ const App = () => {
         });
         
         // Validate canvas before export
-        if (!canvas || canvas.width === 0 || canvas.height === 0) {
-          throw new Error('Canvas is empty or invalid');
+        if (!canvas) {
+          throw new Error('Canvas creation failed');
         }
         
-        // Check if canvas has content (not all black/transparent)
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, Math.min(canvas.width, 100), Math.min(canvas.height, 100));
-        const pixels = imageData.data;
-        let hasContent = false;
-        for (let i = 3; i < pixels.length; i += 4) {
-          if (pixels[i] > 0) { // Check alpha channel
-            hasContent = true;
-            break;
-          }
+        if (canvas.width === 0 || canvas.height === 0) {
+          throw new Error(`Canvas has invalid dimensions: ${canvas.width}x${canvas.height}`);
         }
         
-        if (!hasContent) {
-          throw new Error('Canvas appears to be empty. Please ensure map is fully loaded before exporting.');
-        }
+        // Log canvas info for debugging
+        console.log('Canvas created:', {
+          width: canvas.width,
+          height: canvas.height,
+          mapWidth,
+          mapHeight
+        });
         
         const link = document.createElement('a');
         link.download = `permaculture-map-${Date.now()}.png`;
@@ -2773,16 +2792,28 @@ const App = () => {
         
         showToast('Capturing map...', 'info');
         
+        // Ensure map container is visible and has proper dimensions
+        mapContainer.style.visibility = 'visible';
+        mapContainer.style.display = 'block';
+        mapContainer.style.opacity = '1';
+        mapContainer.style.position = 'relative';
+        
+        // Force map to redraw
+        if (mapInstanceRef.current) {
+          mapInstanceRef.current.invalidateSize();
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
         // Capture the map with better options for Leaflet
         const canvas = await html2canvas(mapContainer, {
-          backgroundColor: 'transparent',
+          backgroundColor: '#ffffff', // White background instead of transparent
           useCORS: true,
-          logging: false,
+          logging: true, // Enable logging to debug
           width: mapWidth,
           height: mapHeight,
-          scale: 2, // Higher scale for better quality
+          scale: 1, // Use scale 1 to avoid issues
           allowTaint: true,
-          foreignObjectRendering: true, // Enable for better label rendering
+          foreignObjectRendering: false, // Better for Leaflet
           removeContainer: false,
           imageTimeout: 60000, // Longer timeout for tiles
           onclone: (clonedDoc) => {
@@ -2791,7 +2822,7 @@ const App = () => {
             if (clonedMap) {
               clonedMap.style.visibility = 'visible';
               clonedMap.style.display = 'block';
-              clonedMap.style.position = 'absolute';
+              clonedMap.style.position = 'relative';
               clonedMap.style.top = '0';
               clonedMap.style.left = '0';
               clonedMap.style.width = mapWidth + 'px';
@@ -2800,18 +2831,29 @@ const App = () => {
               clonedMap.style.padding = '0';
               clonedMap.style.transform = 'none';
               clonedMap.style.zIndex = '1';
-              clonedMap.style.backgroundColor = 'transparent';
+              clonedMap.style.backgroundColor = '#ffffff';
+              clonedMap.style.overflow = 'visible';
               
               // Fix Leaflet map pane positioning
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
               if (leafletPane) {
-                leafletPane.style.position = 'absolute';
+                leafletPane.style.position = 'relative';
                 leafletPane.style.top = '0';
                 leafletPane.style.left = '0';
                 leafletPane.style.width = '100%';
                 leafletPane.style.height = '100%';
                 leafletPane.style.zIndex = '1';
+                leafletPane.style.visibility = 'visible';
+                leafletPane.style.display = 'block';
               }
+              
+              // Ensure all Leaflet panes are visible
+              const allPanes = clonedMap.querySelectorAll('.leaflet-pane');
+              allPanes.forEach((pane) => {
+                pane.style.visibility = 'visible';
+                pane.style.display = 'block';
+                pane.style.opacity = '1';
+              });
               
               // CRITICAL: Ensure satellite basemap tiles are visible and prioritized
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
@@ -2898,25 +2940,21 @@ const App = () => {
         });
         
         // Validate canvas before export
-        if (!canvas || canvas.width === 0 || canvas.height === 0) {
-          throw new Error('Canvas is empty or invalid');
+        if (!canvas) {
+          throw new Error('Canvas creation failed');
         }
         
-        // Check if canvas has content (not all black/transparent)
-        const ctx = canvas.getContext('2d');
-        const imageData = ctx.getImageData(0, 0, Math.min(canvas.width, 100), Math.min(canvas.height, 100));
-        const pixels = imageData.data;
-        let hasContent = false;
-        for (let i = 3; i < pixels.length; i += 4) {
-          if (pixels[i] > 0) { // Check alpha channel
-            hasContent = true;
-            break;
-          }
+        if (canvas.width === 0 || canvas.height === 0) {
+          throw new Error(`Canvas has invalid dimensions: ${canvas.width}x${canvas.height}`);
         }
         
-        if (!hasContent) {
-          throw new Error('Canvas appears to be empty. Please ensure map is fully loaded before exporting.');
-        }
+        // Log canvas info for debugging
+        console.log('Canvas created for PDF:', {
+          width: canvas.width,
+          height: canvas.height,
+          mapWidth,
+          mapHeight
+        });
         
         // Calculate PDF dimensions to fit properly
         const pdfWidth = 297; // A4 landscape width in mm
