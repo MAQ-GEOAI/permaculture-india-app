@@ -3,11 +3,13 @@ services:
     name: permaculture-backend
     env: python
     rootDir: backend
-    buildCommand: pip install --upgrade pip setuptools wheel && pip install -r requirements.txt
+    buildCommand: chmod +x build.sh && ./build.sh
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: PORT
         value: 8000
       - key: PYTHON_VERSION
         value: 3.11.0
+      - key: PIP_VERSION
+        value: 24.0
 
