@@ -1295,20 +1295,38 @@ const App = () => {
           });
       };
       
-      // Fetch all layers in parallel with timeouts - with progress tracking
-      showToast('Fetching terrain data from backend (this may take 1-2 minutes)...', 'info');
-      log('Starting parallel backend requests...');
+      // First, test backend is responsive with a quick health check
+      log('Testing backend connectivity...');
+      try {
+        const healthTest = await fetchWithTimeout(`${BACKEND_URL}/`, 10000); // 10 second timeout for health check
+        if (healthTest.ok) {
+          log('✅ Backend is responsive');
+          showToast('Backend connected. Fetching terrain data...', 'info');
+        } else {
+          logWarn(`Backend health check returned: ${healthTest.status}`);
+        }
+      } catch (healthError) {
+        logWarn('Backend health check failed (may be spinning up):', healthError);
+        showToast('Backend may be slow (free tier). Starting analysis anyway...', 'warning');
+      }
       
+      // Fetch all layers in parallel with timeouts - with progress tracking
+      showToast('Fetching terrain data from backend (this may take 2-3 minutes for free tier)...', 'info');
+      log('Starting parallel backend requests...');
+      log(`Backend URL: ${BACKEND_URL}`);
+      log(`Contour URL: ${contourUrl}`);
+      
+      // Use longer timeout for free tier backend (may need to wake up)
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetchWithTimeout(contourUrl, 120000).catch(e => {
+        fetchWithTimeout(contourUrl, 180000).catch(e => { // 3 minutes for contours (DEM processing is slow)
           logWarn('Contours request failed:', e);
           throw e;
         }),
-        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 120000).catch(e => {
+        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 180000).catch(e => {
           logWarn('Hydrology request failed:', e);
           throw e;
         }),
-        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 120000).catch(e => {
+        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 180000).catch(e => {
           logWarn('Slope/aspect request failed:', e);
           throw e;
         })
