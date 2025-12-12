@@ -2485,7 +2485,7 @@ const App = () => {
   }, [aoi]);
   
   // ========== EXPORT & SHARE ==========
-  // Wait for all map tiles to load completely
+  // Wait for all map tiles to load completely - SIMPLIFIED AND RELIABLE
   const waitForAllTiles = (map) => {
     return new Promise((resolve) => {
       if (!map) {
@@ -2493,47 +2493,62 @@ const App = () => {
         return;
       }
       
-      let tilesLoaded = 0;
-      let tilesTotal = 0;
       let checkInterval;
       let timeout;
+      let consecutiveChecks = 0;
+      const REQUIRED_CONSECUTIVE = 3; // Need 3 consecutive checks with all tiles loaded
       
-      // Count all tiles
       const countTiles = () => {
         const tileImages = map.getContainer().querySelectorAll('img.leaflet-tile');
-        tilesTotal = tileImages.length;
+        const tilesTotal = tileImages.length;
+        
+        if (tilesTotal === 0) {
+          // No tiles yet, keep checking
+          consecutiveChecks = 0;
+          return;
+        }
         
         // Check if all tiles are loaded
         let loadedCount = 0;
         tileImages.forEach((img) => {
-          if (img.complete && img.naturalWidth > 0) {
+          // Check if image is loaded AND has valid dimensions
+          if (img.complete && img.naturalWidth > 0 && img.naturalHeight > 0 && !img.src.includes('data:image')) {
             loadedCount++;
           }
         });
         
-        tilesLoaded = loadedCount;
-        
-        // If all tiles are loaded, resolve
-        if (tilesTotal > 0 && tilesLoaded === tilesTotal) {
-          clearInterval(checkInterval);
-          clearTimeout(timeout);
-          setTimeout(resolve, 500); // Extra wait for rendering
-          return;
+        // If all tiles are loaded, increment consecutive counter
+        if (loadedCount === tilesTotal && tilesTotal > 0) {
+          consecutiveChecks++;
+          if (consecutiveChecks >= REQUIRED_CONSECUTIVE) {
+            clearInterval(checkInterval);
+            clearTimeout(timeout);
+            // Extra wait to ensure rendering is complete
+            setTimeout(() => {
+              log(`All ${tilesTotal} tiles loaded successfully`);
+              resolve();
+            }, 1000);
+            return;
+          }
+        } else {
+          consecutiveChecks = 0; // Reset if not all loaded
         }
       };
       
-      // Check every 100ms
-      checkInterval = setInterval(countTiles, 100);
+      // Check every 200ms
+      checkInterval = setInterval(countTiles, 200);
       
       // Initial check
       countTiles();
       
-      // Timeout after 10 seconds
+      // Timeout after 15 seconds (longer for satellite tiles)
       timeout = setTimeout(() => {
         clearInterval(checkInterval);
-        logWarn('Tile loading timeout, proceeding with export');
+        const tileImages = map.getContainer().querySelectorAll('img.leaflet-tile');
+        const loaded = Array.from(tileImages).filter(img => img.complete && img.naturalWidth > 0).length;
+        logWarn(`Tile loading timeout. Loaded ${loaded}/${tileImages.length} tiles. Proceeding with export.`);
         resolve();
-      }, 10000);
+      }, 15000);
     });
   };
   
@@ -2625,7 +2640,12 @@ const App = () => {
     await waitForAllTiles(map);
     
     // Additional wait to ensure satellite tiles are fully rendered
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    // Force map to load tiles at current view
+    map.invalidateSize();
+    map._onResize();
+    
+    // Wait longer for satellite imagery to load
+    await new Promise(resolve => setTimeout(resolve, 3000));
   };
   
   const exportMapPNG = async () => {
