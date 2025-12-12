@@ -1207,22 +1207,41 @@ const App = () => {
     }
     
     try {
+      // First, test if backend is alive
+      try {
+        const healthCheck = await fetch(`${BACKEND_URL}/`, { signal: AbortSignal.timeout(5000) });
+        if (!healthCheck.ok) {
+          throw new Error(`Backend health check failed: ${healthCheck.status}`);
+        }
+        log('Backend is alive and responding');
+      } catch (healthError) {
+        logError('Backend health check failed:', healthError);
+        showToast('Backend is not responding. Check if it\'s deployed and running.', 'error');
+        setIsAnalyzing(false);
+        return;
+      }
+      
       // NEW APPROACH: Use OpenTopoMap contour tile overlay instead of generating from DEM
       // This provides pre-generated, real terrain contours
       const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
       
       // Helper function to add timeout to fetch
-      const fetchWithTimeout = (url, timeout = 60000) => {
-        return Promise.race([
-          fetch(url),
-          new Promise((_, reject) => 
-            setTimeout(() => reject(new Error(`Request timeout after ${timeout}ms`)), timeout)
-          )
-        ]);
+      const fetchWithTimeout = (url, timeout = 120000) => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        
+        return fetch(url, { signal: controller.signal })
+          .finally(() => clearTimeout(timeoutId))
+          .catch(err => {
+            if (err.name === 'AbortError') {
+              throw new Error(`Request timeout after ${timeout}ms`);
+            }
+            throw err;
+          });
       };
       
       // Fetch all layers in parallel with timeouts
-      showToast('Fetching terrain data from backend...', 'info');
+      showToast('Fetching terrain data from backend (this may take 1-2 minutes)...', 'info');
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
         fetchWithTimeout(contourUrl, 120000), // 2 minutes for contours (DEM processing takes time)
         fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 120000), // 2 minutes for hydrology
