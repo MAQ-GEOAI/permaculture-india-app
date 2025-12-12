@@ -204,6 +204,16 @@ const App = () => {
   const [sidebarCollapsed, setSidebarCollapsed] = useState({});
   const [show3D, setShow3D] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // Safety: Clear analyzing state on unmount
+  useEffect(() => {
+    return () => {
+      if (isAnalyzing) {
+        console.warn('Component unmounting while analyzing - clearing state');
+        setIsAnalyzing(false);
+      }
+    };
+  }, [isAnalyzing]);
   const [pondCalc, setPondCalc] = useState({ area: '', depth: '', result: null });
   const [aiGoal, setAiGoal] = useState('');
   const [aiStrategy, setAiStrategy] = useState(null);
