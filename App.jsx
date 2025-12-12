@@ -1197,6 +1197,7 @@ const App = () => {
       return;
     }
     
+    // Ensure we clear any previous analysis state
     setIsAnalyzing(true);
     const bbox = getBboxString(aoi);
     
@@ -1205,6 +1206,13 @@ const App = () => {
       setIsAnalyzing(false);
       return;
     }
+    
+    // Global timeout for entire analysis (3 minutes max)
+    const analysisTimeout = setTimeout(() => {
+      logError('Analysis timed out after 3 minutes');
+      showToast('Analysis timed out. Backend may be slow. Try a smaller area.', 'error');
+      setIsAnalyzing(false);
+    }, 180000); // 3 minutes
     
     try {
       // Test backend health with short timeout (don't block if slow)
@@ -1228,28 +1236,56 @@ const App = () => {
       // This provides pre-generated, real terrain contours
       const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
       
-      // Helper function to add timeout to fetch
+      // Helper function to add timeout to fetch - bulletproof version
       const fetchWithTimeout = (url, timeout = 120000) => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), timeout);
+        let timeoutId;
         
-        return fetch(url, { signal: controller.signal })
-          .finally(() => clearTimeout(timeoutId))
+        const fetchPromise = fetch(url, { 
+          signal: controller.signal,
+          mode: 'cors',
+          cache: 'no-cache'
+        });
+        
+        const timeoutPromise = new Promise((_, reject) => {
+          timeoutId = setTimeout(() => {
+            controller.abort();
+            reject(new Error(`Request timeout after ${timeout}ms`));
+          }, timeout);
+        });
+        
+        return Promise.race([fetchPromise, timeoutPromise])
+          .finally(() => {
+            if (timeoutId) clearTimeout(timeoutId);
+          })
           .catch(err => {
-            if (err.name === 'AbortError') {
+            if (err.name === 'AbortError' || err.message?.includes('timeout')) {
               throw new Error(`Request timeout after ${timeout}ms`);
             }
             throw err;
           });
       };
       
-      // Fetch all layers in parallel with timeouts
+      // Fetch all layers in parallel with timeouts - with progress tracking
       showToast('Fetching terrain data from backend (this may take 1-2 minutes)...', 'info');
+      log('Starting parallel backend requests...');
+      
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetchWithTimeout(contourUrl, 120000), // 2 minutes for contours (DEM processing takes time)
-        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 120000), // 2 minutes for hydrology
-        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 120000) // 2 minutes for slope/aspect
+        fetchWithTimeout(contourUrl, 120000).catch(e => {
+          logWarn('Contours request failed:', e);
+          throw e;
+        }),
+        fetchWithTimeout(`${BACKEND_URL}/hydrology?bbox=${bbox}`, 120000).catch(e => {
+          logWarn('Hydrology request failed:', e);
+          throw e;
+        }),
+        fetchWithTimeout(`${BACKEND_URL}/slope-aspect?bbox=${bbox}`, 120000).catch(e => {
+          logWarn('Slope/aspect request failed:', e);
+          throw e;
+        })
       ]);
+      
+      log('All backend requests completed (some may have failed)');
       
       // Process contours
       // Check if request was successful (fulfilled and response ok)
@@ -1319,8 +1355,16 @@ const App = () => {
       }
       
       // Process hydrology
-      if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value.ok) {
-        const hydrologyData = await hydrologyRes.value.json();
+      if (hydrologyRes.status === 'fulfilled' && hydrologyRes.value && hydrologyRes.value.ok) {
+        let hydrologyData;
+        try {
+          hydrologyData = await hydrologyRes.value.json();
+        } catch (jsonError) {
+          logError('Failed to parse hydrology JSON:', jsonError);
+          // Continue - hydrology is not critical
+        }
+        
+        if (!hydrologyData) return; // Skip if JSON parse failed
         setAnalysisLayers(prev => ({ ...prev, hydrology: hydrologyData }));
         
         // Extract different hydrology components
@@ -1468,9 +1512,17 @@ const App = () => {
       }
       
       // Process slope and aspect
-      if (slopeAspectRes.status === 'fulfilled' && slopeAspectRes.value.ok) {
+      if (slopeAspectRes.status === 'fulfilled' && slopeAspectRes.value && slopeAspectRes.value.ok) {
         try {
-          const slopeAspectData = await slopeAspectRes.value.json();
+          let slopeAspectData;
+          try {
+            slopeAspectData = await slopeAspectRes.value.json();
+          } catch (jsonError) {
+            logError('Failed to parse slope/aspect JSON:', jsonError);
+            throw jsonError;
+          }
+          
+          if (!slopeAspectData) return; // Skip if JSON parse failed
           
           if (slopeAspectData.slope && slopeAspectData.slope.features && slopeAspectData.slope.features.length > 0) {
             setAnalysisLayers(prev => ({ ...prev, slope: slopeAspectData.slope }));
@@ -1581,16 +1633,19 @@ const App = () => {
       }
     } catch (error) {
       // Handle backend connection errors gracefully
+      console.error('Analysis error:', error);
       if (error.message?.includes('Failed to fetch') || error.message?.includes('ERR_CONNECTION_REFUSED')) {
-        showToast('Backend server not running. Creating sample visualizations...', 'info');
-        // DO NOT use fallback - show error instead
-        // Fallback creates fake data that doesn't represent real terrain
+        showToast('Backend server not responding. Check deployment status.', 'error');
+      } else if (error.message?.includes('timeout')) {
+        showToast('Analysis timed out. Backend may be slow. Try a smaller area or wait for backend to spin up.', 'error');
       } else {
-        console.error('Analysis error:', error);
         showToast('Analysis failed: ' + (error.message || 'Unknown error'), 'error');
       }
     } finally {
+      // ALWAYS clear timeout and analysis state
+      clearTimeout(analysisTimeout);
       setIsAnalyzing(false);
+      log('Analysis completed - isAnalyzing cleared');
     }
   };
   
