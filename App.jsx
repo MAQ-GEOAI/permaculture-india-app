@@ -1128,18 +1128,12 @@ const App = () => {
     const map = mapInstanceRef.current;
     const contoursVisible = layerVisibility.contours === true;
     
-    // Handle contourTiles separately - it's controlled by the contours checkbox
-    // but doesn't have its own visibility key (layerVisibility.contourTiles doesn't exist)
+    // Remove any OpenTopoMap contour tiles - we only want actual contour GeoJSON data
     const contourTilesLayer = layerRefs.current.contourTiles;
-    if (contourTilesLayer) {
-      const tilesOnMap = map.hasLayer(contourTilesLayer);
-      if (contoursVisible && !tilesOnMap) {
-        contourTilesLayer.addTo(map);
-        log('Contour tiles ON');
-      } else if (!contoursVisible && tilesOnMap) {
-        map.removeLayer(contourTilesLayer);
-        log('Contour tiles OFF');
-      }
+    if (contourTilesLayer && map.hasLayer(contourTilesLayer)) {
+      map.removeLayer(contourTilesLayer);
+      layerRefs.current.contourTiles = null;
+      log('Removed OpenTopoMap overlay - using only contour GeoJSON data');
     }
     
     // Toggle other layers - skip contourTiles (handled above)
@@ -1216,146 +1210,63 @@ const App = () => {
       if (contoursSuccess) {
         const contoursData = await contoursRes.value.json();
         
-        // Validate contours are not uniform (check if they vary)
-        const features = contoursData.features || [];
-        if (features.length > 0) {
-          // Check if contours have variation (not all same shape)
-          const firstCoords = features[0]?.geometry?.coordinates?.[0] || [];
-          const isUniform = features.every(f => {
-            const coords = f.geometry?.coordinates?.[0] || [];
-            return coords.length === firstCoords.length;
-          });
-          
-          if (isUniform && features.length > 5) {
-            // Likely uniform contours - use tile-based instead
-            showToast('Generated contours appear uniform. Using pre-generated contour layer instead.', 'info');
-            
-            // Remove existing contour tiles if any
-            if (layerRefs.current.contourTiles && mapInstanceRef.current) {
-              mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-              layerRefs.current.contourTiles = null;
-            }
-            
-            if (mapInstanceRef.current) {
-              const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-                attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
-                maxZoom: 17,
-                opacity: 0.8, // Increased opacity for better visibility
-                pane: 'overlayPane' // Render above basemap
-              });
-              contourTiles.addTo(mapInstanceRef.current);
-              layerRefs.current.contourTiles = contourTiles;
-              setLayerVisibility(prev => ({ ...prev, contours: true }));
-            }
-          } else {
-            // Real contours - use them
-            setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
-            setLayerVisibility(prev => ({ ...prev, contours: true }));
-            renderContours(contoursData, true);
-            const count = features.length;
-            showToast(`Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
-          }
-        } else {
-          showToast('No contours generated. Using pre-generated contour layer.', 'info');
-          
-          // Remove existing contour tiles if any
-          if (layerRefs.current.contourTiles && mapInstanceRef.current) {
-            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-            layerRefs.current.contourTiles = null;
-          }
-          
-          if (mapInstanceRef.current) {
-            const contourTiles = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-              attribution: '© OpenTopoMap (CC-BY-SA) - Pre-generated contours',
-              maxZoom: 17,
-              subdomains: ['a', 'b', 'c'],
-              opacity: 0.35, // Lower opacity to preserve satellite imagery
-              pane: 'overlayPane' // Render above basemap
-            });
-            
-            // Apply CSS filter to enhance contour lines visibility
-            contourTiles.on('tileload', (e) => {
-              const img = e.tile;
-              if (img && img.complete) {
-                img.style.filter = 'contrast(1.3) brightness(0.9) saturate(0.5)';
-                img.style.mixBlendMode = 'multiply';
-              }
-            });
-            contourTiles.addTo(mapInstanceRef.current);
-            layerRefs.current.contourTiles = contourTiles;
-            setLayerVisibility(prev => ({ ...prev, contours: true }));
-          }
-        }
-      } else {
-        // Backend failed - use tile-based contour overlay immediately
-        const errorReason = contoursRes.status === 'rejected' 
-          ? 'Network/CORS error' 
-          : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
-        logWarn(`Backend contours unavailable (${errorReason}), using tile-based contour overlay`);
-        showToast('Backend unavailable. Using topographic map with contour lines (OpenTopoMap)', 'info');
-        
-        // Remove existing contour tiles if any
+        // Remove any OpenTopoMap overlay tiles - we only want actual contour GeoJSON data
         if (layerRefs.current.contourTiles && mapInstanceRef.current) {
           try {
             mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
           } catch (e) {
-            logWarn('Error removing existing contour tiles:', e);
+            logWarn('Error removing contour tiles:', e);
           }
           layerRefs.current.contourTiles = null;
         }
         
-        // Add contour lines as overlay layer on satellite imagery (keeps satellite basemap)
-        if (mapInstanceRef.current) {
-          // Remove existing contour overlay if any
-          if (layerRefs.current.contourTiles) {
-            try {
-              if (mapInstanceRef.current.hasLayer(layerRefs.current.contourTiles)) {
-                mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-              }
-            } catch (e) {
-              logWarn('Error removing existing contour overlay:', e);
-            }
-            layerRefs.current.contourTiles = null;
-          }
-          
-          // Use a better contour visualization approach
-          // Option 1: Use OpenTopoMap with very low opacity to extract just contour lines
-          // Option 2: Use a dedicated contour tile service if available
-          // For now, use OpenTopoMap with very low opacity and better styling
-          const contourOverlay = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', {
-            attribution: '© OpenTopoMap (CC-BY-SA) - Contour lines overlay',
-            maxZoom: 17,
-            subdomains: ['a', 'b', 'c'],
-            opacity: 0.35, // Lower opacity to preserve satellite imagery while showing contours
-            pane: 'overlayPane', // Render above basemap
-            zIndex: 400 // Ensure it's above other layers
-          });
-          
-          // Apply CSS filter to enhance contour lines visibility
-          contourOverlay.on('tileload', (e) => {
-            const img = e.tile;
-            if (img && img.complete) {
-              img.style.filter = 'contrast(1.3) brightness(0.9) saturate(0.5)';
-              img.style.mixBlendMode = 'multiply';
-            }
-          });
-          
-          contourOverlay.addTo(mapInstanceRef.current);
-          layerRefs.current.contourTiles = contourOverlay;
-          
-          // Ensure contours layer is visible
+        // Validate contours data
+        const features = contoursData.features || [];
+        if (features.length > 0) {
+          // Use actual contour GeoJSON data - render as vector lines
+          setAnalysisLayers(prev => ({ ...prev, contours: contoursData }));
           setLayerVisibility(prev => ({ ...prev, contours: true }));
-          
-          // Force map to refresh
-          mapInstanceRef.current.invalidateSize();
-          
-          log('Contour overlay added on satellite basemap - brown lines are contour lines');
-          console.log('Contour fallback: OpenTopoMap overlay added - satellite basemap preserved');
-          console.log('Brown/orange lines on the overlay are contour lines showing elevation');
-          showToast('Contour layer overlay added on satellite imagery', 'success');
+          renderContours(contoursData, true);
+          const count = features.length;
+          showToast(`Contours loaded: ${count} lines (${contourInterval}m interval)`, 'success');
         } else {
-          logError('Cannot add contour overlay: map instance not available');
+          showToast('No contours generated from backend.', 'warning');
+          // Clear any existing contours
+          if (layerRefs.current.contours) {
+            try {
+              mapInstanceRef.current.removeLayer(layerRefs.current.contours);
+            } catch (e) {}
+            layerRefs.current.contours = null;
+          }
+          setAnalysisLayers(prev => ({ ...prev, contours: null }));
         }
+      } else {
+        // Backend failed - show error, do NOT add OpenTopoMap overlay
+        const errorReason = contoursRes.status === 'rejected' 
+          ? 'Network/CORS error' 
+          : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
+        logWarn(`Backend contours unavailable (${errorReason})`);
+        showToast('Backend unavailable. Cannot load contours. Please check backend connection.', 'error');
+        
+        // Remove any existing contour tiles or layers
+        if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+          try {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+          } catch (e) {
+            logWarn('Error removing contour tiles:', e);
+          }
+          layerRefs.current.contourTiles = null;
+        }
+        
+        // Clear contour data
+        if (layerRefs.current.contours) {
+          try {
+            mapInstanceRef.current.removeLayer(layerRefs.current.contours);
+          } catch (e) {}
+          layerRefs.current.contours = null;
+        }
+        setAnalysisLayers(prev => ({ ...prev, contours: null }));
+        setLayerVisibility(prev => ({ ...prev, contours: false }));
       }
       
       // Process hydrology
@@ -2514,24 +2425,25 @@ const App = () => {
     const map = mapInstanceRef.current;
     
     // CRITICAL: Remove ALL other basemap layers and ensure ONLY satellite is active
-    // Remove any non-satellite tile layers
+    // Remove any non-satellite tile layers (including OpenTopoMap overlay)
     map.eachLayer((layer) => {
       if (layer instanceof L.TileLayer) {
         const url = layer._url || '';
-        // Remove any non-satellite basemaps (OpenTopoMap, OSM, etc.)
-        if (!url.includes('World_Imagery') && !url.includes('World_Imagery')) {
-          // Check if it's the contour overlay (OpenTopoMap) - keep it if contours are enabled
-          if (url.includes('opentopomap') && layerVisibility.contours) {
-            // Keep contour overlay
-            return;
-          }
-          // Remove other basemaps
-          if (layer !== basemapLayerRef.current && layer !== layerRefs.current.contourTiles) {
+        // Remove ALL non-satellite basemaps - we only want satellite + contour GeoJSON
+        if (!url.includes('World_Imagery') && !url.includes('arcgisonline')) {
+          // Remove OpenTopoMap and any other non-satellite layers
+          if (layer !== basemapLayerRef.current) {
             map.removeLayer(layer);
           }
         }
       }
     });
+    
+    // Ensure contourTiles is removed (we don't want OpenTopoMap overlay)
+    if (layerRefs.current.contourTiles && map.hasLayer(layerRefs.current.contourTiles)) {
+      map.removeLayer(layerRefs.current.contourTiles);
+      layerRefs.current.contourTiles = null;
+    }
     
     // Force satellite basemap to be added and visible
     if (!basemapLayerRef.current || !map.hasLayer(basemapLayerRef.current)) {
@@ -2561,11 +2473,10 @@ const App = () => {
       }
     });
     
-    // Ensure contour tiles overlay is visible if contours are enabled
-    if (layerVisibility.contours && layerRefs.current.contourTiles) {
-      if (!map.hasLayer(layerRefs.current.contourTiles)) {
-        layerRefs.current.contourTiles.addTo(map);
-      }
+    // Remove any OpenTopoMap contour tiles - we only want actual contour GeoJSON data
+    if (layerRefs.current.contourTiles && map.hasLayer(layerRefs.current.contourTiles)) {
+      map.removeLayer(layerRefs.current.contourTiles);
+      layerRefs.current.contourTiles = null;
     }
     
     // Ensure contour labels are visible if enabled
@@ -2692,21 +2603,21 @@ const App = () => {
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
-                tile.style.visibility = 'visible';
-                tile.style.opacity = '1';
-                tile.style.display = 'block';
                 tile.style.position = 'absolute';
                 tile.style.transform = 'none';
                 tile.style.imageRendering = 'auto';
                 
-                // Prioritize satellite tiles (World_Imagery)
+                // Only show satellite tiles - hide OpenTopoMap tiles
                 if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
-                  tile.style.zIndex = '100';
+                  tile.style.visibility = 'visible';
                   tile.style.opacity = '1';
+                  tile.style.display = 'block';
+                  tile.style.zIndex = '100';
                 } else if (tileSrc.includes('opentopomap')) {
-                  // Contour overlay - lower z-index
-                  tile.style.zIndex = '200';
-                  tile.style.opacity = '0.35';
+                  // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
+                  tile.style.display = 'none';
+                  tile.style.visibility = 'hidden';
+                  tile.style.opacity = '0';
                 }
               });
               
@@ -2771,6 +2682,27 @@ const App = () => {
         controls.forEach((el, i) => {
           el.style.display = originalDisplay[i];
         });
+        
+        // Validate canvas before export
+        if (!canvas || canvas.width === 0 || canvas.height === 0) {
+          throw new Error('Canvas is empty or invalid');
+        }
+        
+        // Check if canvas has content (not all black/transparent)
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, Math.min(canvas.width, 100), Math.min(canvas.height, 100));
+        const pixels = imageData.data;
+        let hasContent = false;
+        for (let i = 3; i < pixels.length; i += 4) {
+          if (pixels[i] > 0) { // Check alpha channel
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          throw new Error('Canvas appears to be empty. Please ensure map is fully loaded before exporting.');
+        }
         
         const link = document.createElement('a');
         link.download = `permaculture-map-${Date.now()}.png`;
@@ -2885,21 +2817,21 @@ const App = () => {
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
-                tile.style.visibility = 'visible';
-                tile.style.opacity = '1';
-                tile.style.display = 'block';
                 tile.style.position = 'absolute';
                 tile.style.transform = 'none';
                 tile.style.imageRendering = 'auto';
                 
-                // Prioritize satellite tiles (World_Imagery)
+                // Only show satellite tiles - hide OpenTopoMap tiles
                 if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
-                  tile.style.zIndex = '100';
+                  tile.style.visibility = 'visible';
                   tile.style.opacity = '1';
+                  tile.style.display = 'block';
+                  tile.style.zIndex = '100';
                 } else if (tileSrc.includes('opentopomap')) {
-                  // Contour overlay - lower z-index
-                  tile.style.zIndex = '200';
-                  tile.style.opacity = '0.35';
+                  // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
+                  tile.style.display = 'none';
+                  tile.style.visibility = 'hidden';
+                  tile.style.opacity = '0';
                 }
               });
               
@@ -2964,6 +2896,27 @@ const App = () => {
         controls.forEach((el, i) => {
           el.style.display = originalDisplay[i];
         });
+        
+        // Validate canvas before export
+        if (!canvas || canvas.width === 0 || canvas.height === 0) {
+          throw new Error('Canvas is empty or invalid');
+        }
+        
+        // Check if canvas has content (not all black/transparent)
+        const ctx = canvas.getContext('2d');
+        const imageData = ctx.getImageData(0, 0, Math.min(canvas.width, 100), Math.min(canvas.height, 100));
+        const pixels = imageData.data;
+        let hasContent = false;
+        for (let i = 3; i < pixels.length; i += 4) {
+          if (pixels[i] > 0) { // Check alpha channel
+            hasContent = true;
+            break;
+          }
+        }
+        
+        if (!hasContent) {
+          throw new Error('Canvas appears to be empty. Please ensure map is fully loaded before exporting.');
+        }
         
         // Calculate PDF dimensions to fit properly
         const pdfWidth = 297; // A4 landscape width in mm
