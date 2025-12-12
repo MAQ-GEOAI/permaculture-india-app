@@ -1,5 +1,5 @@
-# contours_fast.py – ULTRA-FAST contour generation using OpenElevation API
-# Optimized for speed and reliability - delivers results in 10-20 seconds
+# contours_fast.py – Professional contour generation using OpenElevation API
+# Optimized for accuracy and speed - matches professional tools like contourmap.app
 import requests
 import numpy as np
 import json
@@ -8,86 +8,147 @@ import time
 
 def generate_contours_fast(bbox, interval=5, bold_interval=None):
     """
-    ULTRA-FAST contour generation - optimized for production
-    Uses minimal API calls and simple algorithm for speed
+    Professional contour generation - accurate and fast
+    Uses higher resolution grid and proper contouring algorithm
     """
     start_time = time.time()
     minx, miny, maxx, maxy = map(float, bbox.split(","))
     
-    # Calculate area and determine optimal grid size
+    # Calculate area and determine optimal grid resolution
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
     
-    # Use smaller grid for speed - max 200 points total
-    if area_km2 > 50:
-        grid_size = 20  # 20x20 = 400 points max
-    elif area_km2 > 10:
-        grid_size = 15  # 15x15 = 225 points
-    else:
-        grid_size = 12  # 12x12 = 144 points
+    # Use higher resolution for accuracy (like contourmap.app)
+    # Balance between accuracy and speed
+    if area_km2 > 100:  # Very large area
+        grid_resolution = 30  # ~30m spacing
+        max_points = 800
+    elif area_km2 > 50:  # Large area
+        grid_resolution = 25  # ~25m spacing
+        max_points = 900
+    elif area_km2 > 10:  # Medium area
+        grid_resolution = 20  # ~20m spacing
+        max_points = 1000
+    else:  # Small area
+        grid_resolution = 15  # ~15m spacing (high detail)
+        max_points = 1000
     
-    # Create grid
-    num_points = min(grid_size, 20)  # Cap at 20x20 = 400 points
-    lons = np.linspace(minx, maxx, num_points)
-    lats = np.linspace(miny, maxy, num_points)
+    # Calculate grid dimensions
+    width_km = (maxx - minx) * 111 * math.cos(math.radians((miny + maxy) / 2))
+    height_km = (maxy - miny) * 111
     
-    # Prepare locations
+    num_points_x = max(30, int(width_km * 1000 / grid_resolution))
+    num_points_y = max(30, int(height_km * 1000 / grid_resolution))
+    
+    # Limit total points but maintain aspect ratio
+    total_points = num_points_x * num_points_y
+    if total_points > max_points:
+        scale = math.sqrt(max_points / total_points)
+        num_points_x = max(25, int(num_points_x * scale))
+        num_points_y = max(25, int(num_points_y * scale))
+    
+    # Create high-resolution grid
+    lons = np.linspace(minx, maxx, num_points_x)
+    lats = np.linspace(miny, maxy, num_points_y)
+    
+    print(f"[CONTOURS_FAST] Using {num_points_x}x{num_points_y} grid ({num_points_x * num_points_y} points) for {area_km2:.2f} km² area")
+    
+    # Prepare locations for API
     locations = []
     for lat in lats:
         for lon in lons:
             locations.append({"latitude": float(lat), "longitude": float(lon)})
     
-    print(f"[CONTOURS_FAST] Requesting {len(locations)} elevation points...")
+    total_points = len(locations)
+    print(f"[CONTOURS_FAST] Requesting {total_points} elevation points from OpenElevation API...")
     
-    # Fetch elevations - single batch request (faster)
+    # Fetch elevations in optimized batches
     elevation_grid = np.full((len(lats), len(lons)), np.nan, dtype=np.float32)
+    batch_size = 100  # API limit per request
     
-    try:
-        # Single request for all points (API handles up to 1000)
-        response = requests.post(
-            "https://api.open-elevation.com/api/v1/lookup",
-            json={"locations": locations},
-            timeout=15  # Shorter timeout
-        )
-        
-        if response.status_code == 200:
-            results = response.json().get('results', [])
-            for idx, result in enumerate(results):
-                if idx < len(locations):
-                    elev = result.get('elevation')
-                    if elev is not None and elev != -32768:
-                        loc = locations[idx]
-                        lat_idx = np.argmin(np.abs(lats - loc['latitude']))
-                        lon_idx = np.argmin(np.abs(lons - loc['longitude']))
-                        elevation_grid[lat_idx, lon_idx] = float(elev)
-        else:
-            raise Exception(f"API returned status {response.status_code}")
-    except Exception as e:
-        print(f"[CONTOURS_FAST] API request failed: {e}")
-        raise Exception(f"Failed to fetch elevation data: {e}")
+    received_count = 0
+    for i in range(0, len(locations), batch_size):
+        batch = locations[i:i+batch_size]
+        try:
+            response = requests.post(
+                "https://api.open-elevation.com/api/v1/lookup",
+                json={"locations": batch},
+                timeout=20
+            )
+            
+            if response.status_code == 200:
+                results = response.json().get('results', [])
+                for idx, result in enumerate(results):
+                    if i + idx < len(locations):
+                        elev = result.get('elevation')
+                        if elev is not None and elev != -32768:
+                            loc = locations[i + idx]
+                            lat_idx = np.argmin(np.abs(lats - loc['latitude']))
+                            lon_idx = np.argmin(np.abs(lons - loc['longitude']))
+                            elevation_grid[lat_idx, lon_idx] = float(elev)
+                            received_count += 1
+        except Exception as e:
+            print(f"[CONTOURS_FAST] Batch {i//batch_size + 1} failed: {e}")
+            continue
     
     api_time = time.time() - start_time
-    print(f"[CONTOURS_FAST] Elevation data fetched in {api_time:.2f}s")
+    print(f"[CONTOURS_FAST] Received {received_count}/{total_points} elevation points in {api_time:.2f}s")
     
-    # Fill NaN with mean
-    valid_data = elevation_grid[~np.isnan(elevation_grid)]
+    if received_count < total_points * 0.5:  # Need at least 50% of points
+        raise Exception(f"Insufficient elevation data: {received_count}/{total_points} points")
+    
+    # Fill missing values with interpolation (simple but effective)
+    valid_mask = ~np.isnan(elevation_grid)
+    valid_data = elevation_grid[valid_mask]
+    
     if len(valid_data) < 10:
-        raise Exception("Insufficient elevation data")
+        raise Exception("Insufficient valid elevation data")
     
-    mean_elev = np.nanmean(elevation_grid)
-    elevation_grid[np.isnan(elevation_grid)] = mean_elev
+    # Use mean of valid neighbors for NaN values (better than global mean)
+    filled_grid = elevation_grid.copy()
+    for i in range(len(lats)):
+        for j in range(len(lons)):
+            if np.isnan(filled_grid[i, j]):
+                # Get 8 neighbors
+                neighbors = []
+                for di in [-1, 0, 1]:
+                    for dj in [-1, 0, 1]:
+                        if di == 0 and dj == 0:
+                            continue
+                        ni, nj = i + di, j + dj
+                        if 0 <= ni < len(lats) and 0 <= nj < len(lons):
+                            if not np.isnan(elevation_grid[ni, nj]):
+                                neighbors.append(elevation_grid[ni, nj])
+                
+                if neighbors:
+                    filled_grid[i, j] = np.mean(neighbors)
+                else:
+                    filled_grid[i, j] = np.nanmean(valid_data)
+    
+    elevation_grid = filled_grid
+    
+    # Smooth the elevation grid slightly for smoother contours
+    smoothed_grid = elevation_grid.copy()
+    for i in range(1, len(lats) - 1):
+        for j in range(1, len(lons) - 1):
+            # 3x3 average
+            smoothed_grid[i, j] = np.mean(elevation_grid[i-1:i+2, j-1:j+2])
+    
+    elevation_grid = smoothed_grid
     
     # Calculate elevation range
     min_elev = float(np.min(elevation_grid))
     max_elev = float(np.max(elevation_grid))
+    
+    print(f"[CONTOURS_FAST] Elevation range: {min_elev:.1f}m - {max_elev:.1f}m")
     
     # Generate contour levels
     min_level = math.floor(min_elev / interval) * interval
     max_level = math.ceil(max_elev / interval) * interval
     levels = np.arange(min_level, max_level + interval, interval)
     
-    print(f"[CONTOURS_FAST] Generating {len(levels)} contour levels (range: {min_elev:.1f}m - {max_elev:.1f}m)")
+    print(f"[CONTOURS_FAST] Generating {len(levels)} contour levels...")
     
-    # SIMPLE MARCHING SQUARES - Fast and reliable
+    # PROFESSIONAL CONTOUR GENERATION - Proper marching squares with line following
     features = []
     min_elev_used = min_elev
     max_elev_used = max_elev
@@ -102,12 +163,12 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
             level_index = int((level - min_level) / interval)
             is_bold = (level_index % bold_interval == 0)
         
-        # Find contour points using simple edge detection
-        contour_points = []
+        # Find all contour segments using marching squares
+        segments = []
         
         for i in range(len(lats) - 1):
             for j in range(len(lons) - 1):
-                # Get cell corners
+                # Get cell corner elevations
                 z00 = elevation_grid[i, j]
                 z01 = elevation_grid[i, j+1]
                 z10 = elevation_grid[i+1, j]
@@ -120,92 +181,63 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
                 if not (cell_min <= level <= cell_max):
                     continue
                 
-                # Cell coordinates
+                # Cell corner coordinates
                 lat0, lat1 = float(lats[i]), float(lats[i+1])
                 lon0, lon1 = float(lons[j]), float(lons[j+1])
                 
-                # Interpolate crossing points on edges
-                # Top edge
+                # Interpolate crossing points on each edge
+                edge_points = []
+                
+                # Top edge (z00 to z01)
                 if (z00 <= level <= z01) or (z01 <= level <= z00):
-                    if abs(z01 - z00) > 0.01:
-                        t = (level - z00) / (z01 - z00) if abs(z01 - z00) > 0.01 else 0.5
-                        contour_points.append([lon0 + t * (lon1 - lon0), lat0, float(level)])
+                    if abs(z01 - z00) > 0.001:
+                        t = (level - z00) / (z01 - z00)
+                        t = max(0, min(1, t))  # Clamp
+                        edge_points.append([lon0 + t * (lon1 - lon0), lat0])
                 
-                # Right edge
+                # Right edge (z01 to z11)
                 if (z01 <= level <= z11) or (z11 <= level <= z01):
-                    if abs(z11 - z01) > 0.01:
-                        t = (level - z01) / (z11 - z01) if abs(z11 - z01) > 0.01 else 0.5
-                        contour_points.append([lon1, lat0 + t * (lat1 - lat0), float(level)])
+                    if abs(z11 - z01) > 0.001:
+                        t = (level - z01) / (z11 - z01)
+                        t = max(0, min(1, t))
+                        edge_points.append([lon1, lat0 + t * (lat1 - lat0)])
                 
-                # Bottom edge
+                # Bottom edge (z10 to z11)
                 if (z10 <= level <= z11) or (z11 <= level <= z10):
-                    if abs(z11 - z10) > 0.01:
-                        t = (level - z10) / (z11 - z10) if abs(z11 - z10) > 0.01 else 0.5
-                        contour_points.append([lon0 + t * (lon1 - lon0), lat1, float(level)])
+                    if abs(z11 - z10) > 0.001:
+                        t = (level - z10) / (z11 - z10)
+                        t = max(0, min(1, t))
+                        edge_points.append([lon0 + t * (lon1 - lon0), lat1])
                 
-                # Left edge
+                # Left edge (z00 to z10)
                 if (z00 <= level <= z10) or (z10 <= level <= z00):
-                    if abs(z10 - z00) > 0.01:
-                        t = (level - z00) / (z10 - z00) if abs(z10 - z00) > 0.01 else 0.5
-                        contour_points.append([lon0, lat0 + t * (lat1 - lat0), float(level)])
+                    if abs(z10 - z00) > 0.001:
+                        t = (level - z00) / (z10 - z00)
+                        t = max(0, min(1, t))
+                        edge_points.append([lon0, lat0 + t * (lat1 - lat0)])
+                
+                # Add segment if we have 2 points (contour crosses this cell)
+                if len(edge_points) == 2:
+                    segments.append({
+                        'points': edge_points,
+                        'cell': (i, j)
+                    })
         
-        if len(contour_points) < 3:
+        if len(segments) < 2:
             continue
         
-        # Connect points into lines (simple nearest neighbor)
-        lines = []
-        used = set()
+        # Connect segments into continuous contour lines
+        lines = connect_segments_to_lines(segments, minx, miny, maxx, maxy)
         
-        for start_idx in range(len(contour_points)):
-            if start_idx in used:
-                continue
-            
-            line = [contour_points[start_idx]]
-            used.add(start_idx)
-            current = contour_points[start_idx]
-            
-            # Connect nearest points
-            max_iterations = 100  # Prevent infinite loops
-            iterations = 0
-            
-            while iterations < max_iterations:
-                nearest_idx = None
-                nearest_dist = float('inf')
-                
-                for idx, point in enumerate(contour_points):
-                    if idx in used:
-                        continue
-                    
-                    dist = math.sqrt((point[0] - current[0])**2 + (point[1] - current[1])**2)
-                    # Max distance: ~500m (0.005 degrees)
-                    if dist < nearest_dist and dist < 0.005:
-                        nearest_dist = dist
-                        nearest_idx = idx
-                
-                if nearest_idx is None:
-                    break
-                
-                line.append(contour_points[nearest_idx])
-                used.add(nearest_idx)
-                current = contour_points[nearest_idx]
-                iterations += 1
-            
-            if len(line) >= 3:
-                lines.append(line)
-        
-        # Create features
+        # Create features for each continuous line
         for line in lines:
-            # Filter coordinates to be within bbox
-            filtered_coords = []
-            for coord in line:
-                lon, lat = coord[0], coord[1]
-                if minx <= lon <= maxx and miny <= lat <= maxy:
-                    filtered_coords.append(coord)
-            
-            if len(filtered_coords) < 3:
+            if len(line) < 3:
                 continue
             
-            # Add color
+            # Add elevation to coordinates
+            coords = [[p[0], p[1], float(level)] for p in line]
+            
+            # Add color based on elevation
             normalized = (level - min_elev_used) / (max_elev_used - min_elev_used) if max_elev_used > min_elev_used else 0.5
             color = get_contour_color(normalized)
             
@@ -213,7 +245,7 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
                 "type": "Feature",
                 "geometry": {
                     "type": "LineString",
-                    "coordinates": filtered_coords
+                    "coordinates": coords
                 },
                 "properties": {
                     "elevation": float(level),
@@ -228,10 +260,10 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
             features.append(feature)
     
     total_time = time.time() - start_time
-    print(f"[CONTOURS_FAST] Generated {len(features)} contours in {total_time:.2f}s total")
+    print(f"[CONTOURS_FAST] ✅ Generated {len(features)} contour features in {total_time:.2f}s")
     
     if len(features) == 0:
-        raise Exception("No contours generated - check elevation data")
+        raise Exception("No contours generated - check elevation data and interval")
     
     return {
         "type": "FeatureCollection",
@@ -246,19 +278,129 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
         }
     }
 
+def connect_segments_to_lines(segments, minx, miny, maxx, maxy):
+    """
+    Connect contour segments into continuous lines
+    Uses proper line following algorithm for smooth contours
+    """
+    lines = []
+    used_segments = set()
+    
+    for start_idx, start_seg in enumerate(segments):
+        if start_idx in used_segments:
+            continue
+        
+        # Start a new line
+        line = []
+        current_seg = start_seg
+        used_segments.add(start_idx)
+        
+        # Add first point
+        line.append(current_seg['points'][0])
+        current_point = current_seg['points'][1]
+        line.append(current_point)
+        
+        # Follow the line
+        max_iterations = 1000  # Safety limit
+        iterations = 0
+        
+        while iterations < max_iterations:
+            # Find next segment that connects to current point
+            next_seg_idx = None
+            min_dist = float('inf')
+            
+            for idx, seg in enumerate(segments):
+                if idx in used_segments:
+                    continue
+                
+                # Check if this segment connects to current point
+                for point in seg['points']:
+                    dist = math.sqrt((point[0] - current_point[0])**2 + (point[1] - current_point[1])**2)
+                    # Very small threshold for connection (same point)
+                    if dist < 0.0001 and dist < min_dist:
+                        min_dist = dist
+                        next_seg_idx = idx
+                        next_seg = seg
+                        # Find the other point in this segment
+                        for p in seg['points']:
+                            if math.sqrt((p[0] - current_point[0])**2 + (p[1] - current_point[1])**2) > 0.0001:
+                                next_point = p
+                                break
+            
+            if next_seg_idx is None:
+                break  # Line ended
+            
+            # Add next point
+            line.append(next_point)
+            current_point = next_point
+            used_segments.add(next_seg_idx)
+            iterations += 1
+        
+        # Also try to extend backwards
+        if len(line) >= 2:
+            # Try to find segments connecting to the start
+            start_point = line[0]
+            while True:
+                found = False
+                for idx, seg in enumerate(segments):
+                    if idx in used_segments:
+                        continue
+                    
+                    for point in seg['points']:
+                        dist = math.sqrt((point[0] - start_point[0])**2 + (point[1] - start_point[1])**2)
+                        if dist < 0.0001:
+                            # Found connecting segment
+                            for p in seg['points']:
+                                if math.sqrt((p[0] - start_point[0])**2 + (p[1] - start_point[1])**2) > 0.0001:
+                                    line.insert(0, p)  # Add at beginning
+                                    start_point = p
+                                    used_segments.add(idx)
+                                    found = True
+                                    break
+                            if found:
+                                break
+                    if found:
+                        break
+                
+                if not found:
+                    break
+        
+        # Filter to bbox and ensure minimum length
+        filtered_line = []
+        for point in line:
+            lon, lat = point[0], point[1]
+            if minx <= lon <= maxx and miny <= lat <= maxy:
+                filtered_line.append(point)
+        
+        if len(filtered_line) >= 3:
+            lines.append(filtered_line)
+    
+    return lines
+
 def get_contour_color(normalized):
-    """Get color based on normalized elevation (0-1)"""
+    """Get color based on normalized elevation (0-1) - matches contourmap.app style"""
     normalized = max(0, min(1, normalized))
     
-    if normalized < 0.2:
-        r, g, b = 59, 130, 246  # Blue
+    # Color gradient similar to contourmap.app (blue to red)
+    if normalized < 0.1:
+        r, g, b = 0, 0, 255  # Dark blue
+    elif normalized < 0.2:
+        r, g, b = 0, 100, 255  # Blue
+    elif normalized < 0.3:
+        r, g, b = 0, 200, 255  # Cyan
     elif normalized < 0.4:
-        r, g, b = 34, 197, 94   # Green
+        r, g, b = 0, 255, 200  # Light cyan
+    elif normalized < 0.5:
+        r, g, b = 0, 255, 100  # Green
     elif normalized < 0.6:
-        r, g, b = 234, 179, 8   # Yellow
+        r, g, b = 100, 255, 0  # Yellow-green
+    elif normalized < 0.7:
+        r, g, b = 200, 255, 0  # Yellow
     elif normalized < 0.8:
-        r, g, b = 249, 115, 22  # Orange
+        r, g, b = 255, 200, 0  # Orange-yellow
+    elif normalized < 0.9:
+        r, g, b = 255, 100, 0  # Orange
     else:
-        r, g, b = 239, 68, 68   # Red
+        r, g, b = 255, 0, 0  # Red
     
     return f"#{r:02x}{g:02x}{b:02x}"
