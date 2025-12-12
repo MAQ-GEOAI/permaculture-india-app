@@ -925,6 +925,216 @@ const App = () => {
     return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
   }, []);
   
+  // ========== ALTERNATIVE CONTOUR GENERATION (When Backend Unavailable) ==========
+  const generateContoursFromElevationAPI = useCallback(async (bbox, interval, boldInterval) => {
+    try {
+      const [minx, miny, maxx, maxy] = bbox.split(',').map(parseFloat);
+      
+      // Create a grid of points for elevation query (simplified approach)
+      const gridSize = 15; // 15x15 grid for reasonable detail without too many API calls
+      const latStep = (maxy - miny) / gridSize;
+      const lonStep = (maxx - minx) / gridSize;
+      
+      const points = [];
+      for (let i = 0; i <= gridSize; i++) {
+        for (let j = 0; j <= gridSize; j++) {
+          const lat = miny + (i * latStep);
+          const lon = minx + (j * lonStep);
+          points.push({ latitude: lat, longitude: lon });
+        }
+      }
+      
+      // Use OpenElevation API (free, no API key needed, CORS enabled)
+      showToast('Fetching elevation data from public API...', 'info');
+      const elevationUrl = 'https://api.open-elevation.com/api/v1/lookup';
+      const elevationRes = await fetch(elevationUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ locations: points })
+      });
+      
+      if (!elevationRes.ok) {
+        throw new Error(`Elevation API failed: ${elevationRes.status}`);
+      }
+      
+      const elevationData = await elevationRes.json();
+      if (!elevationData.results || elevationData.results.length === 0) {
+        throw new Error('No elevation data returned');
+      }
+      
+      const elevations = elevationData.results.map(r => r.elevation || 0);
+      const validElevations = elevations.filter(e => e !== null && e !== undefined && !isNaN(e));
+      if (validElevations.length === 0) {
+        throw new Error('No valid elevation data');
+      }
+      
+      const minElev = Math.min(...validElevations);
+      const maxElev = Math.max(...validElevations);
+      
+      if (maxElev === minElev) {
+        throw new Error('Elevation data is uniform (flat terrain)');
+      }
+      
+      // Generate contour lines using interpolation
+      const features = [];
+      const contourLevels = [];
+      
+      // Calculate contour levels
+      const startLevel = Math.ceil(minElev / interval) * interval;
+      const endLevel = Math.floor(maxElev / interval) * interval;
+      for (let level = startLevel; level <= endLevel; level += interval) {
+        contourLevels.push(level);
+      }
+      
+      // Build elevation grid
+      const grid = [];
+      let idx = 0;
+      for (let i = 0; i <= gridSize; i++) {
+        grid[i] = [];
+        for (let j = 0; j <= gridSize; j++) {
+          grid[i][j] = elevations[idx++] || 0;
+        }
+      }
+      
+      // Generate contour lines for each level using simplified marching squares
+      contourLevels.forEach(level => {
+        const contourSegments = [];
+        
+        // Find crossing points along grid edges
+        for (let i = 0; i < gridSize; i++) {
+          for (let j = 0; j < gridSize; j++) {
+            const z1 = grid[i][j];
+            const z2 = grid[i][j + 1];
+            const z3 = grid[i + 1][j + 1];
+            const z4 = grid[i + 1][j];
+            
+            // Check each edge for level crossing
+            const edges = [];
+            
+            // Top edge (z1 to z2)
+            if ((z1 <= level && z2 > level) || (z1 > level && z2 <= level)) {
+              const t = Math.abs((level - z1) / (z2 - z1));
+              const lat = miny + (i * latStep);
+              const lon = minx + ((j + t) * lonStep);
+              edges.push({ point: [lon, lat], edge: 'top' });
+            }
+            
+            // Right edge (z2 to z3)
+            if ((z2 <= level && z3 > level) || (z2 > level && z3 <= level)) {
+              const t = Math.abs((level - z2) / (z3 - z2));
+              const lat = miny + ((i + t) * latStep);
+              const lon = minx + ((j + 1) * lonStep);
+              edges.push({ point: [lon, lat], edge: 'right' });
+            }
+            
+            // Bottom edge (z3 to z4)
+            if ((z3 <= level && z4 > level) || (z3 > level && z4 <= level)) {
+              const t = Math.abs((level - z3) / (z4 - z3));
+              const lat = miny + ((i + 1) * latStep);
+              const lon = minx + ((j + 1 - t) * lonStep);
+              edges.push({ point: [lon, lat], edge: 'bottom' });
+            }
+            
+            // Left edge (z4 to z1)
+            if ((z4 <= level && z1 > level) || (z4 > level && z1 <= level)) {
+              const t = Math.abs((level - z4) / (z1 - z4));
+              const lat = miny + ((i + 1 - t) * latStep);
+              const lon = minx + (j * lonStep);
+              edges.push({ point: [lon, lat], edge: 'left' });
+            }
+            
+            // Add edges to segments
+            edges.forEach(e => contourSegments.push(e.point));
+          }
+        }
+        
+        // Connect nearby points into contour lines
+        if (contourSegments.length >= 2) {
+          // Sort points by proximity and connect them
+          const lines = [];
+          const used = new Set();
+          
+          for (let i = 0; i < contourSegments.length; i++) {
+            if (used.has(i)) continue;
+            
+            const line = [contourSegments[i]];
+            used.add(i);
+            let currentPoint = contourSegments[i];
+            let found = true;
+            
+            while (found) {
+              found = false;
+              let closestIdx = -1;
+              let closestDist = Infinity;
+              
+              for (let j = 0; j < contourSegments.length; j++) {
+                if (used.has(j)) continue;
+                
+                const dist = Math.sqrt(
+                  Math.pow(contourSegments[j][0] - currentPoint[0], 2) +
+                  Math.pow(contourSegments[j][1] - currentPoint[1], 2)
+                );
+                
+                if (dist < 0.02 && dist < closestDist) { // Connect if within reasonable distance
+                  closestIdx = j;
+                  closestDist = dist;
+                  found = true;
+                }
+              }
+              
+              if (found) {
+                line.push(contourSegments[closestIdx]);
+                currentPoint = contourSegments[closestIdx];
+                used.add(closestIdx);
+              }
+            }
+            
+            if (line.length >= 2) {
+              lines.push(line);
+            }
+          }
+          
+          // Create features for each line
+          lines.forEach(line => {
+            const isBold = boldInterval && (level % (interval * boldInterval) === 0);
+            const normalized = maxElev > minElev ? (level - minElev) / (maxElev - minElev) : 0.5;
+            const color = getColorFromNormalized(normalized);
+            
+            features.push({
+              type: 'Feature',
+              geometry: {
+                type: 'LineString',
+                coordinates: line
+              },
+              properties: {
+                elevation: Math.round(level),
+                bold: isBold,
+                weight: isBold ? 2.5 : 1,
+                color: color
+              }
+            });
+          });
+        }
+      });
+      
+      if (features.length === 0) {
+        throw new Error('No contour lines generated');
+      }
+      
+      return {
+        type: 'FeatureCollection',
+        features: features,
+        properties: {
+          min_elevation: minElev,
+          max_elevation: maxElev
+        }
+      };
+    } catch (error) {
+      logError('Failed to generate contours from elevation API:', error);
+      return null;
+    }
+  }, [getColorFromNormalized]);
+  
   // ========== SPECIALIZED CONTOUR RENDERING ==========
   const renderContours = useCallback((geojson, forceVisible = null) => {
     if (!mapInstanceRef.current || !geojson || !geojson.features) return;
@@ -1241,32 +1451,58 @@ const App = () => {
           setAnalysisLayers(prev => ({ ...prev, contours: null }));
         }
       } else {
-        // Backend failed - show error, do NOT add OpenTopoMap overlay
+        // Backend failed - try alternative contour source
         const errorReason = contoursRes.status === 'rejected' 
           ? 'Network/CORS error' 
           : (contoursRes.value?.status ? `HTTP ${contoursRes.value.status}` : 'Unknown error');
-        logWarn(`Backend contours unavailable (${errorReason})`);
-        showToast('Backend unavailable. Cannot load contours. Please check backend connection.', 'error');
+        logWarn(`Backend contours unavailable (${errorReason}), trying alternative source...`);
+        showToast('Backend unavailable. Trying alternative contour source...', 'info');
         
-        // Remove any existing contour tiles or layers
-        if (layerRefs.current.contourTiles && mapInstanceRef.current) {
-          try {
-            mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
-          } catch (e) {
-            logWarn('Error removing contour tiles:', e);
+        // Try using OpenElevation API to get elevation data and generate contours client-side
+        try {
+          const altContours = await generateContoursFromElevationAPI(bbox, contourInterval, contourBoldInterval);
+          if (altContours && altContours.features && altContours.features.length > 0) {
+            // Remove any OpenTopoMap overlay tiles
+            if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+              try {
+                mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+              } catch (e) {}
+              layerRefs.current.contourTiles = null;
+            }
+            
+            // Use alternative contours
+            setAnalysisLayers(prev => ({ ...prev, contours: altContours }));
+            setLayerVisibility(prev => ({ ...prev, contours: true }));
+            renderContours(altContours, true);
+            const count = altContours.features.length;
+            showToast(`Contours loaded from alternative source: ${count} lines`, 'success');
+          } else {
+            throw new Error('No contours from alternative source');
           }
-          layerRefs.current.contourTiles = null;
+        } catch (altError) {
+          logError('Alternative contour source failed:', altError);
+          showToast('Cannot load contours. Backend unavailable and alternative source failed.', 'error');
+          
+          // Remove any existing contour tiles or layers
+          if (layerRefs.current.contourTiles && mapInstanceRef.current) {
+            try {
+              mapInstanceRef.current.removeLayer(layerRefs.current.contourTiles);
+            } catch (e) {
+              logWarn('Error removing contour tiles:', e);
+            }
+            layerRefs.current.contourTiles = null;
+          }
+          
+          // Clear contour data
+          if (layerRefs.current.contours) {
+            try {
+              mapInstanceRef.current.removeLayer(layerRefs.current.contours);
+            } catch (e) {}
+            layerRefs.current.contours = null;
+          }
+          setAnalysisLayers(prev => ({ ...prev, contours: null }));
+          setLayerVisibility(prev => ({ ...prev, contours: false }));
         }
-        
-        // Clear contour data
-        if (layerRefs.current.contours) {
-          try {
-            mapInstanceRef.current.removeLayer(layerRefs.current.contours);
-          } catch (e) {}
-          layerRefs.current.contours = null;
-        }
-        setAnalysisLayers(prev => ({ ...prev, contours: null }));
-        setLayerVisibility(prev => ({ ...prev, contours: false }));
       }
       
       // Process hydrology
