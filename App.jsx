@@ -475,10 +475,11 @@ const App = () => {
       map.removeLayer(basemapLayerRef.current);
     }
     
-    // Add new basemap
+    // Add new basemap with crossOrigin for html2canvas export
     const tileLayerOptions = {
       attribution: config.attribution,
-      maxZoom: config.maxZoom
+      maxZoom: config.maxZoom,
+      crossOrigin: 'anonymous' // CRITICAL: Enable CORS for html2canvas export
     };
     
     if (config.subdomains) {
@@ -2652,11 +2653,12 @@ const App = () => {
         } catch (e) {}
       }
       
-      // Create fresh satellite basemap
+      // Create fresh satellite basemap with crossOrigin for html2canvas
       const satelliteConfig = basemapConfigs.satellite;
       basemapLayerRef.current = L.tileLayer(satelliteConfig.url, {
         attribution: satelliteConfig.attribution,
-        maxZoom: satelliteConfig.maxZoom
+        maxZoom: satelliteConfig.maxZoom,
+        crossOrigin: 'anonymous' // CRITICAL: Enable CORS for html2canvas export
       });
       basemapLayerRef.current.addTo(map);
     }
