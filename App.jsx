@@ -2986,29 +2986,64 @@ const App = () => {
               const images = clonedMap.querySelectorAll('img.leaflet-tile');
               console.log(`[PNG EXPORT] Converting ${images.length} tiles to data URLs to bypass CORS...`);
               
-              // Convert each tile image to canvas/data URL
+              // CRITICAL: First preserve ALL tile positioning BEFORE converting to data URLs
+              // This ensures alignment is maintained
+              const originalTiles = document.querySelectorAll('img.leaflet-tile');
+              const tilePositionMap = new Map();
+              
+              // Store original tile positions and transforms
+              originalTiles.forEach((origTile, idx) => {
+                const origStyle = window.getComputedStyle(origTile);
+                tilePositionMap.set(origTile.src, {
+                  position: origStyle.position,
+                  top: origStyle.top,
+                  left: origStyle.left,
+                  transform: origStyle.transform,
+                  width: origStyle.width,
+                  height: origStyle.height,
+                  tile: origTile
+                });
+              });
+              
+              // Now convert each tile image to canvas/data URL while preserving positioning
               await Promise.all(Array.from(images).map(async (img, idx) => {
                 try {
                   // Skip if already a data URL
                   if (img.src && img.src.startsWith('data:')) {
                     console.log(`[PNG EXPORT] Tile ${idx + 1}/${images.length} already data URL`);
-                    return;
-                  }
-                  
-                  // Get corresponding original tile
-                  const originalTiles = document.querySelectorAll('img.leaflet-tile');
-                  let originalTile = null;
-                  for (const orig of originalTiles) {
-                    if (orig.src === img.src || (img.src && orig.src.includes(img.src.split('/').pop()))) {
-                      originalTile = orig;
-                      break;
+                    // Still preserve positioning even if already converted
+                    const posData = tilePositionMap.get(img.getAttribute('data-original-src') || img.src);
+                    if (posData) {
+                      img.style.position = posData.position;
+                      img.style.top = posData.top;
+                      img.style.left = posData.left;
+                      img.style.transform = posData.transform;
+                      img.style.width = posData.width;
+                      img.style.height = posData.height;
                     }
-                  }
-                  
-                  if (!originalTile) {
-                    console.warn(`[PNG EXPORT] Original tile not found for ${idx + 1}`);
                     return;
                   }
+                  
+                  // Store original src for later matching
+                  const originalSrc = img.src;
+                  img.setAttribute('data-original-src', originalSrc);
+                  
+                  // Get corresponding original tile using stored position map
+                  const posData = tilePositionMap.get(originalSrc);
+                  if (!posData) {
+                    console.warn(`[PNG EXPORT] Original tile position not found for ${idx + 1}`);
+                    return;
+                  }
+                  
+                  const originalTile = posData.tile;
+                  
+                  // CRITICAL: Preserve positioning BEFORE conversion
+                  img.style.position = posData.position;
+                  img.style.top = posData.top;
+                  img.style.left = posData.left;
+                  img.style.transform = posData.transform;
+                  img.style.width = posData.width;
+                  img.style.height = posData.height;
                   
                   // Wait for original tile to load
                   if (!originalTile.complete || originalTile.naturalWidth === 0) {
@@ -3036,11 +3071,11 @@ const App = () => {
                     // Convert to data URL
                     const dataURL = canvas.toDataURL('image/png');
                     
-                    // Replace img src with data URL
+                    // Replace img src with data URL (positioning already preserved above)
                     img.src = dataURL;
                     img.crossOrigin = null; // Remove crossOrigin since it's now a data URL
                     
-                    console.log(`[PNG EXPORT] Tile ${idx + 1}/${images.length} converted to data URL`);
+                    console.log(`[PNG EXPORT] Tile ${idx + 1}/${images.length} converted to data URL with positioning preserved`);
                   }
                 } catch (error) {
                   console.warn(`[PNG EXPORT] Failed to convert tile ${idx + 1}:`, error);
@@ -3136,17 +3171,19 @@ const App = () => {
               
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
+                const originalSrc = tile.getAttribute('data-original-src') || tileSrc;
                 
-                // Find corresponding original tile to preserve its exact transform
+                // Find corresponding original tile - use data-original-src if available (for data URLs)
                 let originalTile = null;
                 originalTiles.forEach(origTile => {
-                  if (origTile.src === tile.src) {
+                  if (origTile.src === originalSrc || origTile.src === tileSrc) {
                     originalTile = origTile;
                   }
                 });
                 
                 if (originalTile) {
                   const tileStyle = window.getComputedStyle(originalTile);
+                  // CRITICAL: Preserve exact positioning - this ensures alignment
                   tile.style.position = tileStyle.position;
                   tile.style.top = tileStyle.top;
                   tile.style.left = tileStyle.left;
@@ -3776,17 +3813,19 @@ const App = () => {
               
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
+                const originalSrc = tile.getAttribute('data-original-src') || tileSrc;
                 
-                // Find corresponding original tile to preserve its exact transform
+                // Find corresponding original tile - use data-original-src if available (for data URLs)
                 let originalTile = null;
                 originalTiles.forEach(origTile => {
-                  if (origTile.src === tile.src) {
+                  if (origTile.src === originalSrc || origTile.src === tileSrc) {
                     originalTile = origTile;
                   }
                 });
                 
                 if (originalTile) {
                   const tileStyle = window.getComputedStyle(originalTile);
+                  // CRITICAL: Preserve exact positioning - this ensures alignment
                   tile.style.position = tileStyle.position;
                   tile.style.top = tileStyle.top;
                   tile.style.left = tileStyle.left;
