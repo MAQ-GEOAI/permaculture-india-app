@@ -1016,12 +1016,13 @@ const App = () => {
       
       const contourLine = L.polyline(latlngs, {
         color: color,
-        weight: isBold ? 3.5 : 2,  // Thicker lines for better visibility on satellite
-        opacity: isBold ? 0.9 : 0.75,  // Good opacity for visibility over satellite
+        weight: isBold ? 4 : 3,  // Thicker lines for better visibility (especially in export)
+        opacity: isBold ? 1.0 : 0.9,  // Full opacity for export visibility
         lineCap: 'round',
         lineJoin: 'round',
         smoothFactor: 1.0,  // Smoother lines
-        pane: 'overlayPane' // Ensure contours render above basemap
+        pane: 'overlayPane', // Ensure contours render above basemap
+        interactive: true  // Ensure it's rendered
       });
       
       // Add to appropriate group
@@ -2886,8 +2887,18 @@ const App = () => {
                 }
               });
               
-              // CRITICAL: Fix SVG overlays (contours, etc.) - ensure they're above basemap and visible
-              const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
+              // CRITICAL: Ensure Leaflet overlay pane is visible (contains contours)
+              const overlayPane = clonedMap.querySelector('.leaflet-overlay-pane');
+              if (overlayPane) {
+                overlayPane.style.visibility = 'visible';
+                overlayPane.style.display = 'block';
+                overlayPane.style.opacity = '1';
+                overlayPane.style.zIndex = '300';
+                overlayPane.style.pointerEvents = 'none';
+              }
+              
+              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - ensure they're above basemap and visible
+              const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
               svgOverlays.forEach((svg) => {
                 svg.style.position = 'absolute';
                 svg.style.top = '0';
@@ -2897,28 +2908,57 @@ const App = () => {
                 svg.style.display = 'block';
                 svg.style.zIndex = '300';
                 svg.style.pointerEvents = 'none';
+                svg.setAttribute('style', svg.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; display: block !important;');
                 
-                // Ensure all path elements inside SVG are visible (contours)
+                // CRITICAL: Ensure all path elements inside SVG are visible (contours)
                 const paths = svg.querySelectorAll('path');
                 paths.forEach((path) => {
                   path.style.visibility = 'visible';
                   path.style.opacity = '1';
                   path.style.display = 'block';
-                  const strokeWidth = path.getAttribute('stroke-width') || '2';
-                  const stroke = path.getAttribute('stroke') || '#3b82f6';
+                  path.style.fill = 'none';
+                  
+                  // Get or set stroke attributes
+                  let strokeWidth = path.getAttribute('stroke-width');
+                  let stroke = path.getAttribute('stroke');
+                  
+                  if (!strokeWidth || strokeWidth === '0') {
+                    strokeWidth = '3'; // Default thicker for export
+                  }
+                  if (!stroke || stroke === 'none') {
+                    stroke = '#3b82f6'; // Default blue
+                  }
+                  
+                  // Set both style and attribute
                   path.style.strokeWidth = strokeWidth;
                   path.style.stroke = stroke;
+                  path.style.strokeOpacity = '1';
                   path.setAttribute('stroke-width', strokeWidth);
                   path.setAttribute('stroke', stroke);
+                  path.setAttribute('stroke-opacity', '1');
+                  path.setAttribute('fill', 'none');
+                  path.setAttribute('style', path.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; stroke-width: ' + strokeWidth + ' !important; stroke: ' + stroke + ' !important;');
                 });
               });
               
-              // Also check for polyline overlays (Leaflet sometimes uses these for contours)
-              const polylines = clonedMap.querySelectorAll('svg path, svg polyline');
-              polylines.forEach((line) => {
-                line.style.visibility = 'visible';
-                line.style.opacity = '1';
-                line.style.display = 'block';
+              // Also check for ALL paths in overlay pane
+              const allPaths = clonedMap.querySelectorAll('.leaflet-overlay-pane path, svg path');
+              allPaths.forEach((path) => {
+                path.style.visibility = 'visible';
+                path.style.opacity = '1';
+                path.style.display = 'block';
+                path.style.fill = 'none';
+                
+                if (!path.getAttribute('stroke') || path.getAttribute('stroke') === 'none') {
+                  path.setAttribute('stroke', '#3b82f6');
+                  path.style.stroke = '#3b82f6';
+                }
+                if (!path.getAttribute('stroke-width') || path.getAttribute('stroke-width') === '0') {
+                  path.setAttribute('stroke-width', '3');
+                  path.style.strokeWidth = '3';
+                }
+                path.setAttribute('stroke-opacity', '1');
+                path.style.strokeOpacity = '1';
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
@@ -3184,8 +3224,18 @@ const App = () => {
                 }
               });
               
-              // CRITICAL: Fix SVG overlays (contours, etc.) - ensure they're above basemap and visible
-              const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
+              // CRITICAL: Ensure Leaflet overlay pane is visible (contains contours)
+              const overlayPane = clonedMap.querySelector('.leaflet-overlay-pane');
+              if (overlayPane) {
+                overlayPane.style.visibility = 'visible';
+                overlayPane.style.display = 'block';
+                overlayPane.style.opacity = '1';
+                overlayPane.style.zIndex = '300';
+                overlayPane.style.pointerEvents = 'none';
+              }
+              
+              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - ensure they're above basemap and visible
+              const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
               svgOverlays.forEach((svg) => {
                 svg.style.position = 'absolute';
                 svg.style.top = '0';
@@ -3195,28 +3245,57 @@ const App = () => {
                 svg.style.display = 'block';
                 svg.style.zIndex = '300';
                 svg.style.pointerEvents = 'none';
+                svg.setAttribute('style', svg.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; display: block !important;');
                 
-                // Ensure all path elements inside SVG are visible (contours)
+                // CRITICAL: Ensure all path elements inside SVG are visible (contours)
                 const paths = svg.querySelectorAll('path');
                 paths.forEach((path) => {
                   path.style.visibility = 'visible';
                   path.style.opacity = '1';
                   path.style.display = 'block';
-                  const strokeWidth = path.getAttribute('stroke-width') || '2';
-                  const stroke = path.getAttribute('stroke') || '#3b82f6';
+                  path.style.fill = 'none';
+                  
+                  // Get or set stroke attributes
+                  let strokeWidth = path.getAttribute('stroke-width');
+                  let stroke = path.getAttribute('stroke');
+                  
+                  if (!strokeWidth || strokeWidth === '0') {
+                    strokeWidth = '3'; // Default thicker for export
+                  }
+                  if (!stroke || stroke === 'none') {
+                    stroke = '#3b82f6'; // Default blue
+                  }
+                  
+                  // Set both style and attribute
                   path.style.strokeWidth = strokeWidth;
                   path.style.stroke = stroke;
+                  path.style.strokeOpacity = '1';
                   path.setAttribute('stroke-width', strokeWidth);
                   path.setAttribute('stroke', stroke);
+                  path.setAttribute('stroke-opacity', '1');
+                  path.setAttribute('fill', 'none');
+                  path.setAttribute('style', path.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; stroke-width: ' + strokeWidth + ' !important; stroke: ' + stroke + ' !important;');
                 });
               });
               
-              // Also check for polyline overlays (Leaflet sometimes uses these for contours)
-              const polylines = clonedMap.querySelectorAll('svg path, svg polyline');
-              polylines.forEach((line) => {
-                line.style.visibility = 'visible';
-                line.style.opacity = '1';
-                line.style.display = 'block';
+              // Also check for ALL paths in overlay pane
+              const allPaths = clonedMap.querySelectorAll('.leaflet-overlay-pane path, svg path');
+              allPaths.forEach((path) => {
+                path.style.visibility = 'visible';
+                path.style.opacity = '1';
+                path.style.display = 'block';
+                path.style.fill = 'none';
+                
+                if (!path.getAttribute('stroke') || path.getAttribute('stroke') === 'none') {
+                  path.setAttribute('stroke', '#3b82f6');
+                  path.style.stroke = '#3b82f6';
+                }
+                if (!path.getAttribute('stroke-width') || path.getAttribute('stroke-width') === '0') {
+                  path.setAttribute('stroke-width', '3');
+                  path.style.strokeWidth = '3';
+                }
+                path.setAttribute('stroke-opacity', '1');
+                path.style.strokeOpacity = '1';
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
