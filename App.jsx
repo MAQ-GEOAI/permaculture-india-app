@@ -2886,7 +2886,7 @@ const App = () => {
                 }
               });
               
-              // Fix SVG overlays (contours, etc.) - ensure they're above basemap
+              // CRITICAL: Fix SVG overlays (contours, etc.) - ensure they're above basemap and visible
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
               svgOverlays.forEach((svg) => {
                 svg.style.position = 'absolute';
@@ -2894,8 +2894,31 @@ const App = () => {
                 svg.style.left = '0';
                 svg.style.visibility = 'visible';
                 svg.style.opacity = '1';
+                svg.style.display = 'block';
                 svg.style.zIndex = '300';
                 svg.style.pointerEvents = 'none';
+                
+                // Ensure all path elements inside SVG are visible (contours)
+                const paths = svg.querySelectorAll('path');
+                paths.forEach((path) => {
+                  path.style.visibility = 'visible';
+                  path.style.opacity = '1';
+                  path.style.display = 'block';
+                  const strokeWidth = path.getAttribute('stroke-width') || '2';
+                  const stroke = path.getAttribute('stroke') || '#3b82f6';
+                  path.style.strokeWidth = strokeWidth;
+                  path.style.stroke = stroke;
+                  path.setAttribute('stroke-width', strokeWidth);
+                  path.setAttribute('stroke', stroke);
+                });
+              });
+              
+              // Also check for polyline overlays (Leaflet sometimes uses these for contours)
+              const polylines = clonedMap.querySelectorAll('svg path, svg polyline');
+              polylines.forEach((line) => {
+                line.style.visibility = 'visible';
+                line.style.opacity = '1';
+                line.style.display = 'block';
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
@@ -3161,7 +3184,7 @@ const App = () => {
                 }
               });
               
-              // Fix SVG overlays (contours, etc.) - ensure they're above basemap
+              // CRITICAL: Fix SVG overlays (contours, etc.) - ensure they're above basemap and visible
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated');
               svgOverlays.forEach((svg) => {
                 svg.style.position = 'absolute';
@@ -3169,8 +3192,31 @@ const App = () => {
                 svg.style.left = '0';
                 svg.style.visibility = 'visible';
                 svg.style.opacity = '1';
+                svg.style.display = 'block';
                 svg.style.zIndex = '300';
                 svg.style.pointerEvents = 'none';
+                
+                // Ensure all path elements inside SVG are visible (contours)
+                const paths = svg.querySelectorAll('path');
+                paths.forEach((path) => {
+                  path.style.visibility = 'visible';
+                  path.style.opacity = '1';
+                  path.style.display = 'block';
+                  const strokeWidth = path.getAttribute('stroke-width') || '2';
+                  const stroke = path.getAttribute('stroke') || '#3b82f6';
+                  path.style.strokeWidth = strokeWidth;
+                  path.style.stroke = stroke;
+                  path.setAttribute('stroke-width', strokeWidth);
+                  path.setAttribute('stroke', stroke);
+                });
+              });
+              
+              // Also check for polyline overlays (Leaflet sometimes uses these for contours)
+              const polylines = clonedMap.querySelectorAll('svg path, svg polyline');
+              polylines.forEach((line) => {
+                line.style.visibility = 'visible';
+                line.style.opacity = '1';
+                line.style.display = 'block';
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
