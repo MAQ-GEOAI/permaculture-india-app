@@ -3233,6 +3233,7 @@ const App = () => {
                 path.style.strokeWidth = strokeWidth + 'px';
                 path.setAttribute('stroke-opacity', '1');
                 path.style.strokeOpacity = '1';
+                path.setAttribute('vector-effect', 'non-scaling-stroke');
                 
                 // Force with !important
                 const existingStyle = path.getAttribute('style') || '';
@@ -3240,7 +3241,13 @@ const App = () => {
                   '; visibility: visible !important; ' +
                   'opacity: 1 !important; ' +
                   'stroke-width: ' + strokeWidth + 'px !important; ' +
-                  'stroke: ' + stroke + ' !important;');
+                  'stroke: ' + stroke + ' !important; ' +
+                  'vector-effect: non-scaling-stroke !important;');
+                
+                // CRITICAL: Set presentation attributes for html2canvas
+                path.setAttribute('visibility', 'visible');
+                path.setAttribute('opacity', '1');
+                path.setAttribute('display', 'block');
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
@@ -3817,6 +3824,7 @@ const App = () => {
                 path.style.strokeWidth = strokeWidth + 'px';
                 path.setAttribute('stroke-opacity', '1');
                 path.style.strokeOpacity = '1';
+                path.setAttribute('vector-effect', 'non-scaling-stroke');
                 
                 // Force with !important
                 const existingStyle = path.getAttribute('style') || '';
@@ -3824,7 +3832,13 @@ const App = () => {
                   '; visibility: visible !important; ' +
                   'opacity: 1 !important; ' +
                   'stroke-width: ' + strokeWidth + 'px !important; ' +
-                  'stroke: ' + stroke + ' !important;');
+                  'stroke: ' + stroke + ' !important; ' +
+                  'vector-effect: non-scaling-stroke !important;');
+                
+                // CRITICAL: Set presentation attributes for html2canvas
+                path.setAttribute('visibility', 'visible');
+                path.setAttribute('opacity', '1');
+                path.setAttribute('display', 'block');
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
