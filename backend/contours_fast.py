@@ -83,17 +83,17 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
     # Calculate grid size (optimized for ACCURACY - business needs accurate contours)
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
     
-    # Use HIGHER resolution for accuracy - match contourmap.app quality
+    # Use MAXIMUM resolution for accuracy - match professional GIS standards
     if area_km2 > 20:
-        grid_size = 40  # 40x40 = 1600 points (accurate for large areas)
+        grid_size = 60  # 60x60 = 3600 points (high accuracy for large areas)
     elif area_km2 > 10:
-        grid_size = 50  # 50x50 = 2500 points (high accuracy)
+        grid_size = 70  # 70x70 = 4900 points (very high accuracy)
     elif area_km2 > 5:
-        grid_size = 60  # 60x60 = 3600 points (very high accuracy)
+        grid_size = 80  # 80x80 = 6400 points (maximum accuracy)
     else:
-        grid_size = 70  # 70x70 = 4900 points (maximum accuracy for small areas)
+        grid_size = 90  # 90x90 = 8100 points (ultra-high accuracy for small areas)
     
-    # Cap at 100x100 = 10000 points (API limit)
+    # Cap at 100x100 = 10000 points (API limit, but use maximum for accuracy)
     grid_size = min(grid_size, 100)
     
     lons = np.linspace(minx, maxx, grid_size)
@@ -172,9 +172,9 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
                 for idx, (i, j) in enumerate([(i, j) for i in range(len(lats)) for j in range(len(lons)) if nan_mask[i, j]]):
                     elevation_grid[i, j] = interpolated[idx]
         
-        # Smooth the elevation grid for better contours
-        elevation_grid = gaussian_filter(elevation_grid, sigma=0.5)
-        log("Applied scipy interpolation and smoothing for accuracy")
+        # Smooth the elevation grid for better contours (light smoothing to preserve accuracy)
+        elevation_grid = gaussian_filter(elevation_grid, sigma=0.3)  # Reduced sigma for less smoothing, more accuracy
+        log("Applied scipy cubic interpolation and light smoothing for maximum accuracy")
     except ImportError:
         # Fallback: simple mean fill
         mean_elev = np.nanmean(elevation_grid)

@@ -2858,23 +2858,40 @@ const App = () => {
               }));
             }
             
-            // Now ensure map container is visible in clone
+            // Now ensure map container is visible in clone - PRESERVE EXACT POSITIONING
             clonedMap = clonedDoc.getElementById('leaflet-map-container');
             if (clonedMap) {
-              clonedMap.style.visibility = 'visible';
-              clonedMap.style.display = 'block';
-              clonedMap.style.position = 'relative';
-              clonedMap.style.top = '0';
-              clonedMap.style.left = '0';
-              clonedMap.style.width = mapWidth + 'px';
-              clonedMap.style.height = mapHeight + 'px';
-              clonedMap.style.margin = '0';
-              clonedMap.style.padding = '0';
-              // DO NOT remove transform - may be needed for proper rendering
-              // clonedMap.style.transform = 'none';
-              clonedMap.style.zIndex = '1';
-              clonedMap.style.backgroundColor = '#ffffff';
-              clonedMap.style.overflow = 'visible';
+              // Get original container style to preserve exact positioning
+              const originalContainer = document.getElementById('leaflet-map-container');
+              if (originalContainer) {
+                const originalStyle = window.getComputedStyle(originalContainer);
+                clonedMap.style.visibility = 'visible';
+                clonedMap.style.display = originalStyle.display || 'block';
+                clonedMap.style.position = originalStyle.position || 'relative';
+                // PRESERVE original top/left - don't reset to 0!
+                clonedMap.style.top = originalStyle.top;
+                clonedMap.style.left = originalStyle.left;
+                clonedMap.style.width = originalStyle.width || mapWidth + 'px';
+                clonedMap.style.height = originalStyle.height || mapHeight + 'px';
+                clonedMap.style.margin = originalStyle.margin || '0';
+                clonedMap.style.padding = originalStyle.padding || '0';
+                clonedMap.style.transform = originalStyle.transform || 'none';
+                clonedMap.style.zIndex = originalStyle.zIndex || '1';
+                clonedMap.style.backgroundColor = '#ffffff';
+                clonedMap.style.overflow = originalStyle.overflow || 'visible';
+              } else {
+                // Fallback if original not found
+                clonedMap.style.visibility = 'visible';
+                clonedMap.style.display = 'block';
+                clonedMap.style.position = 'relative';
+                clonedMap.style.width = mapWidth + 'px';
+                clonedMap.style.height = mapHeight + 'px';
+                clonedMap.style.margin = '0';
+                clonedMap.style.padding = '0';
+                clonedMap.style.zIndex = '1';
+                clonedMap.style.backgroundColor = '#ffffff';
+                clonedMap.style.overflow = 'visible';
+              }
               
               // Fix Leaflet map pane positioning - PRESERVE LEAFLET COORDINATE SYSTEM
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
@@ -2886,13 +2903,30 @@ const App = () => {
                 leafletPane.style.zIndex = '1';
               }
               
-              // Ensure all Leaflet panes are visible - PRESERVE THEIR POSITIONING
+              // Ensure all Leaflet panes are visible - PRESERVE THEIR EXACT POSITIONING FROM ORIGINAL
               const allPanes = clonedMap.querySelectorAll('.leaflet-pane');
-              allPanes.forEach((pane) => {
+              const originalPanes = document.querySelectorAll('.leaflet-pane');
+              
+              allPanes.forEach((pane, index) => {
+                // Find corresponding original pane
+                const originalPane = originalPanes[index] || Array.from(originalPanes).find(orig => 
+                  orig.className === pane.className
+                );
+                
+                if (originalPane) {
+                  const paneStyle = window.getComputedStyle(originalPane);
+                  // PRESERVE exact positioning from original
+                  pane.style.position = paneStyle.position;
+                  pane.style.top = paneStyle.top;
+                  pane.style.left = paneStyle.left;
+                  pane.style.transform = paneStyle.transform;
+                  pane.style.width = paneStyle.width;
+                  pane.style.height = paneStyle.height;
+                }
+                
                 pane.style.visibility = 'visible';
                 pane.style.display = 'block';
                 pane.style.opacity = '1';
-                // DO NOT modify position, top, left, or transform - Leaflet manages these!
               });
               
               // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE EXACT POSITIONING
@@ -3045,13 +3079,53 @@ const App = () => {
                 }
               });
               
-              // Ensure all marker icons (including label markers) are visible
+              // Ensure all marker icons (including label markers) are visible - PRESERVE POSITIONING
               const markerIcons = clonedMap.querySelectorAll('.leaflet-marker-icon');
-              markerIcons.forEach((icon) => {
+              const originalMarkerIcons = document.querySelectorAll('.leaflet-marker-icon');
+              
+              markerIcons.forEach((icon, index) => {
+                // Find corresponding original marker to preserve position
+                const originalIcon = originalMarkerIcons[index] || Array.from(originalMarkerIcons).find(orig => 
+                  orig.src === icon.src || orig.getAttribute('class') === icon.getAttribute('class')
+                );
+                
+                if (originalIcon) {
+                  const iconStyle = window.getComputedStyle(originalIcon);
+                  icon.style.position = iconStyle.position;
+                  icon.style.top = iconStyle.top;
+                  icon.style.left = iconStyle.left;
+                  icon.style.transform = iconStyle.transform;
+                  icon.style.marginLeft = iconStyle.marginLeft;
+                  icon.style.marginTop = iconStyle.marginTop;
+                }
+                
                 icon.style.visibility = 'visible';
                 icon.style.opacity = '1';
                 icon.style.zIndex = '400';
                 icon.style.pointerEvents = 'none';
+              });
+              
+              // CRITICAL: Ensure area of interest polygon is visible and correctly positioned
+              const aoiPaths = clonedMap.querySelectorAll('.leaflet-overlay-pane path[fill="#22c55e"], .leaflet-overlay-pane path[fill="rgb(34, 197, 94)"]');
+              const originalAoiPaths = document.querySelectorAll('.leaflet-overlay-pane path[fill="#22c55e"], .leaflet-overlay-pane path[fill="rgb(34, 197, 94)"]');
+              
+              aoiPaths.forEach((path, index) => {
+                const originalPath = originalAoiPaths[index] || Array.from(originalAoiPaths).find(orig => 
+                  orig.getAttribute('d') === path.getAttribute('d')
+                );
+                
+                if (originalPath) {
+                  const pathStyle = window.getComputedStyle(originalPath);
+                  path.style.stroke = pathStyle.stroke || '#22c55e';
+                  path.style.fill = pathStyle.fill || '#22c55e';
+                  path.style.strokeWidth = pathStyle.strokeWidth || '3';
+                  path.style.fillOpacity = pathStyle.fillOpacity || '0.3';
+                  path.style.strokeOpacity = pathStyle.strokeOpacity || '0.9';
+                }
+                
+                path.style.visibility = 'visible';
+                path.style.opacity = '1';
+                path.style.display = 'block';
               });
               
               // Ensure marker shadows are visible
@@ -3230,23 +3304,40 @@ const App = () => {
               }));
             }
             
-            // Now ensure map container is visible in clone
+            // Now ensure map container is visible in clone - PRESERVE EXACT POSITIONING
             clonedMap = clonedDoc.getElementById('leaflet-map-container');
             if (clonedMap) {
-              clonedMap.style.visibility = 'visible';
-              clonedMap.style.display = 'block';
-              clonedMap.style.position = 'relative';
-              clonedMap.style.top = '0';
-              clonedMap.style.left = '0';
-              clonedMap.style.width = mapWidth + 'px';
-              clonedMap.style.height = mapHeight + 'px';
-              clonedMap.style.margin = '0';
-              clonedMap.style.padding = '0';
-              // DO NOT remove transform - may be needed for proper rendering
-              // clonedMap.style.transform = 'none';
-              clonedMap.style.zIndex = '1';
-              clonedMap.style.backgroundColor = '#ffffff';
-              clonedMap.style.overflow = 'visible';
+              // Get original container style to preserve exact positioning
+              const originalContainer = document.getElementById('leaflet-map-container');
+              if (originalContainer) {
+                const originalStyle = window.getComputedStyle(originalContainer);
+                clonedMap.style.visibility = 'visible';
+                clonedMap.style.display = originalStyle.display || 'block';
+                clonedMap.style.position = originalStyle.position || 'relative';
+                // PRESERVE original top/left - don't reset to 0!
+                clonedMap.style.top = originalStyle.top;
+                clonedMap.style.left = originalStyle.left;
+                clonedMap.style.width = originalStyle.width || mapWidth + 'px';
+                clonedMap.style.height = originalStyle.height || mapHeight + 'px';
+                clonedMap.style.margin = originalStyle.margin || '0';
+                clonedMap.style.padding = originalStyle.padding || '0';
+                clonedMap.style.transform = originalStyle.transform || 'none';
+                clonedMap.style.zIndex = originalStyle.zIndex || '1';
+                clonedMap.style.backgroundColor = '#ffffff';
+                clonedMap.style.overflow = originalStyle.overflow || 'visible';
+              } else {
+                // Fallback if original not found
+                clonedMap.style.visibility = 'visible';
+                clonedMap.style.display = 'block';
+                clonedMap.style.position = 'relative';
+                clonedMap.style.width = mapWidth + 'px';
+                clonedMap.style.height = mapHeight + 'px';
+                clonedMap.style.margin = '0';
+                clonedMap.style.padding = '0';
+                clonedMap.style.zIndex = '1';
+                clonedMap.style.backgroundColor = '#ffffff';
+                clonedMap.style.overflow = 'visible';
+              }
               
               // Fix Leaflet map pane positioning - PRESERVE LEAFLET COORDINATE SYSTEM
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
@@ -3258,13 +3349,30 @@ const App = () => {
                 leafletPane.style.zIndex = '1';
               }
               
-              // Ensure all Leaflet panes are visible - PRESERVE THEIR POSITIONING
+              // Ensure all Leaflet panes are visible - PRESERVE THEIR EXACT POSITIONING FROM ORIGINAL
               const allPanes = clonedMap.querySelectorAll('.leaflet-pane');
-              allPanes.forEach((pane) => {
+              const originalPanes = document.querySelectorAll('.leaflet-pane');
+              
+              allPanes.forEach((pane, index) => {
+                // Find corresponding original pane
+                const originalPane = originalPanes[index] || Array.from(originalPanes).find(orig => 
+                  orig.className === pane.className
+                );
+                
+                if (originalPane) {
+                  const paneStyle = window.getComputedStyle(originalPane);
+                  // PRESERVE exact positioning from original
+                  pane.style.position = paneStyle.position;
+                  pane.style.top = paneStyle.top;
+                  pane.style.left = paneStyle.left;
+                  pane.style.transform = paneStyle.transform;
+                  pane.style.width = paneStyle.width;
+                  pane.style.height = paneStyle.height;
+                }
+                
                 pane.style.visibility = 'visible';
                 pane.style.display = 'block';
                 pane.style.opacity = '1';
-                // DO NOT modify position, top, left, or transform - Leaflet manages these!
               });
               
               // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE EXACT POSITIONING
@@ -3417,13 +3525,53 @@ const App = () => {
                 }
               });
               
-              // Ensure all marker icons (including label markers) are visible
+              // Ensure all marker icons (including label markers) are visible - PRESERVE POSITIONING
               const markerIcons = clonedMap.querySelectorAll('.leaflet-marker-icon');
-              markerIcons.forEach((icon) => {
+              const originalMarkerIcons = document.querySelectorAll('.leaflet-marker-icon');
+              
+              markerIcons.forEach((icon, index) => {
+                // Find corresponding original marker to preserve position
+                const originalIcon = originalMarkerIcons[index] || Array.from(originalMarkerIcons).find(orig => 
+                  orig.src === icon.src || orig.getAttribute('class') === icon.getAttribute('class')
+                );
+                
+                if (originalIcon) {
+                  const iconStyle = window.getComputedStyle(originalIcon);
+                  icon.style.position = iconStyle.position;
+                  icon.style.top = iconStyle.top;
+                  icon.style.left = iconStyle.left;
+                  icon.style.transform = iconStyle.transform;
+                  icon.style.marginLeft = iconStyle.marginLeft;
+                  icon.style.marginTop = iconStyle.marginTop;
+                }
+                
                 icon.style.visibility = 'visible';
                 icon.style.opacity = '1';
                 icon.style.zIndex = '400';
                 icon.style.pointerEvents = 'none';
+              });
+              
+              // CRITICAL: Ensure area of interest polygon is visible and correctly positioned
+              const aoiPaths = clonedMap.querySelectorAll('.leaflet-overlay-pane path[fill="#22c55e"], .leaflet-overlay-pane path[fill="rgb(34, 197, 94)"]');
+              const originalAoiPaths = document.querySelectorAll('.leaflet-overlay-pane path[fill="#22c55e"], .leaflet-overlay-pane path[fill="rgb(34, 197, 94)"]');
+              
+              aoiPaths.forEach((path, index) => {
+                const originalPath = originalAoiPaths[index] || Array.from(originalAoiPaths).find(orig => 
+                  orig.getAttribute('d') === path.getAttribute('d')
+                );
+                
+                if (originalPath) {
+                  const pathStyle = window.getComputedStyle(originalPath);
+                  path.style.stroke = pathStyle.stroke || '#22c55e';
+                  path.style.fill = pathStyle.fill || '#22c55e';
+                  path.style.strokeWidth = pathStyle.strokeWidth || '3';
+                  path.style.fillOpacity = pathStyle.fillOpacity || '0.3';
+                  path.style.strokeOpacity = pathStyle.strokeOpacity || '0.9';
+                }
+                
+                path.style.visibility = 'visible';
+                path.style.opacity = '1';
+                path.style.display = 'block';
               });
               
               // Ensure marker shadows are visible
