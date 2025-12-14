@@ -78,7 +78,7 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     if os.path.exists(path):
         return path
 
-    # Priority sources for India - SRTM 30m from OpenTopography Portal (as recommended by Gemini)
+    # Priority sources for India - SRTM 30m from multiple sources including Bhuvan
     # OpenTopography Portal provides SRTM 1 Arc-Second (30m) Global DEM - the gold standard
     if is_india:
         sources = [
@@ -99,6 +99,14 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
                 'url': f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
                 'type': 'tif',
                 'description': 'OpenTopoMap DEM (SRTM-based)'
+            },
+            # Source 4: Bhuvan CartoDEM (30m, India-specific, high quality)
+            # Note: Bhuvan API may require authentication, but trying public endpoints
+            {
+                'url': f"https://bhuvan-app3.nrsc.gov.in/data/download/index.php",
+                'type': 'tif',
+                'description': 'Bhuvan CartoDEM (India-specific)',
+                'requires_auth': True  # May need API key
             },
         ]
     else:

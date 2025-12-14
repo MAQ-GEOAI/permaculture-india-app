@@ -1,466 +1,290 @@
-# contours_fast.py – Professional contour generation matching contourmap.app quality
-# Uses high-resolution elevation data and proper contouring algorithms
-import requests
-import numpy as np
+# contours_fast.py – Professional contour generation using SRTM DEM tiles
+# Uses high-resolution SRTM 30m data from AWS/OpenTopography for accurate contours
+# Matches contourmap.app quality - business-ready
+import tempfile
+import subprocess
 import json
+import os
 import math
-import time
+import numpy as np
+import rasterio
+from utils import download_dem
 
-# Try to import scipy for professional contouring
-try:
-    from scipy.interpolate import griddata
-    from scipy.ndimage import gaussian_filter
-    SCIPY_AVAILABLE = True
-except ImportError:
-    SCIPY_AVAILABLE = False
-    print("[CONTOURS_FAST] scipy not available, using basic interpolation")
-
-def get_elevation_from_multiple_sources(lat, lon):
-    """
-    Get elevation from multiple sources for accuracy
-    Tries OpenElevation first, then falls back to others
-    """
-    sources = [
-        {
-            'name': 'OpenElevation',
-            'url': 'https://api.open-elevation.com/api/v1/lookup',
-            'method': 'post'
-        },
-        {
-            'name': 'ElevationAPI',
-            'url': f'https://api.open-elevation.com/api/v1/lookup',
-            'method': 'post'
-        }
-    ]
-    
-    for source in sources:
-        try:
-            response = requests.post(
-                source['url'],
-                json={"locations": [{"latitude": lat, "longitude": lon}]},
-                timeout=10
-            )
-            if response.status_code == 200:
-                result = response.json().get('results', [{}])[0]
-                elev = result.get('elevation')
-                if elev is not None and elev != -32768:
-                    return float(elev)
-        except:
-            continue
-    
-    return None
+# Simple logging function
+def log(msg):
+    print(f"[CONTOURS_FAST] {msg}")
 
 def generate_contours_fast(bbox, interval=5, bold_interval=None):
     """
-    Professional contour generation - matches contourmap.app quality
-    Uses high-resolution grid and proper algorithms
+    Generate professional contours from SRTM DEM tiles
+    Uses GDAL for accurate contour extraction - matches contourmap.app quality
+    
+    Args:
+        bbox: "minx,miny,maxx,maxy" bounding box string
+        interval: Contour interval in meters (0.5, 1, 2, 5, 10, 20, 50, 100)
+        bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour is bold)
+    
+    Returns:
+        GeoJSON FeatureCollection with contours, including bold contours
     """
-    start_time = time.time()
     minx, miny, maxx, maxy = map(float, bbox.split(","))
+    center_lat = (miny + maxy) / 2
+    center_lon = (minx + maxx) / 2
     
-    # Calculate area
-    area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
+    log(f"Starting contour generation for bbox={bbox}, interval={interval}m")
     
-    # HIGH RESOLUTION for accuracy (like contourmap.app)
-    # Use finer grid for better accuracy
-    if area_km2 > 100:
-        spacing_m = 40  # 40m spacing for large areas
-        max_points = 1200
-    elif area_km2 > 50:
-        spacing_m = 30  # 30m spacing
-        max_points = 1500
-    elif area_km2 > 10:
-        spacing_m = 20  # 20m spacing (high detail)
-        max_points = 2000
-    else:
-        spacing_m = 15  # 15m spacing (very high detail)
-        max_points = 2000
-    
-    # Calculate grid dimensions
-    width_km = (maxx - minx) * 111 * math.cos(math.radians((miny + maxy) / 2))
-    height_km = (maxy - miny) * 111
-    
-    num_points_x = max(40, int(width_km * 1000 / spacing_m))
-    num_points_y = max(40, int(height_km * 1000 / spacing_m))
-    
-    # Limit but maintain aspect ratio
-    total_points = num_points_x * num_points_y
-    if total_points > max_points:
-        scale = math.sqrt(max_points / total_points)
-        num_points_x = max(30, int(num_points_x * scale))
-        num_points_y = max(30, int(num_points_y * scale))
-    
-    # Create high-resolution grid
-    lons = np.linspace(minx, maxx, num_points_x)
-    lats = np.linspace(miny, maxy, num_points_y)
-    
-    total_points = num_points_x * num_points_y
-    print(f"[CONTOURS_FAST] Using {num_points_x}x{num_points_y} grid ({total_points} points, {spacing_m}m spacing) for {area_km2:.2f} km²")
-    
-    # Fetch elevations in optimized batches
-    elevation_grid = np.full((len(lats), len(lons)), np.nan, dtype=np.float32)
-    locations = []
-    for lat in lats:
-        for lon in lons:
-            locations.append({"latitude": float(lat), "longitude": float(lon)})
-    
-    print(f"[CONTOURS_FAST] Fetching {len(locations)} elevation points...")
-    
-    # Batch requests (100 points per batch for reliability)
-    batch_size = 100
-    received_count = 0
-    
-    for i in range(0, len(locations), batch_size):
-        batch = locations[i:i+batch_size]
-        try:
-            response = requests.post(
-                "https://api.open-elevation.com/api/v1/lookup",
-                json={"locations": batch},
-                timeout=25
-            )
-            
-            if response.status_code == 200:
-                results = response.json().get('results', [])
-                for idx, result in enumerate(results):
-                    if i + idx < len(locations):
-                        elev = result.get('elevation')
-                        if elev is not None and elev != -32768:
-                            loc = locations[i + idx]
-                            lat_idx = np.argmin(np.abs(lats - loc['latitude']))
-                            lon_idx = np.argmin(np.abs(lons - loc['longitude']))
-                            elevation_grid[lat_idx, lon_idx] = float(elev)
-                            received_count += 1
-        except Exception as e:
-            print(f"[CONTOURS_FAST] Batch {i//batch_size + 1} failed: {e}")
-            continue
-    
-    api_time = time.time() - start_time
-    print(f"[CONTOURS_FAST] Received {received_count}/{total_points} points ({received_count/total_points*100:.1f}%) in {api_time:.2f}s")
-    
-    if received_count < total_points * 0.3:
-        raise Exception(f"Insufficient elevation data: {received_count}/{total_points} points")
-    
-    # PROFESSIONAL INTERPOLATION
-    valid_mask = ~np.isnan(elevation_grid)
-    valid_data = elevation_grid[valid_mask]
-    
-    if len(valid_data) < 10:
-        raise Exception("Insufficient valid elevation data")
-    
-    # Use scipy interpolation if available (much better quality)
-    if SCIPY_AVAILABLE and np.sum(np.isnan(elevation_grid)) > 0:
-        print("[CONTOURS_FAST] Using scipy griddata for professional interpolation...")
-        lon_grid, lat_grid = np.meshgrid(lons, lats)
-        
-        valid_lons = lon_grid[valid_mask]
-        valid_lats = lat_grid[valid_mask]
-        valid_elevs = elevation_grid[valid_mask]
-        
-        nan_mask = np.isnan(elevation_grid)
-        nan_lons = lon_grid[nan_mask]
-        nan_lats = lat_grid[nan_mask]
-        
-        if len(nan_lons) > 0:
-            interpolated = griddata(
-                (valid_lats, valid_lons),
-                valid_elevs,
-                (nan_lats, nan_lons),
-                method='cubic',  # Cubic interpolation for smoothness
-                fill_value=np.nanmean(valid_elevs)
-            )
-            elevation_grid[nan_mask] = interpolated
-    
-    # Fill remaining NaN with neighbor average
-    for i in range(len(lats)):
-        for j in range(len(lons)):
-            if np.isnan(elevation_grid[i, j]):
-                neighbors = []
-                for di in [-1, 0, 1]:
-                    for dj in [-1, 0, 1]:
-                        if di == 0 and dj == 0:
-                            continue
-                        ni, nj = i + di, j + dj
-                        if 0 <= ni < len(lats) and 0 <= nj < len(lons):
-                            if not np.isnan(elevation_grid[ni, nj]):
-                                neighbors.append(elevation_grid[ni, nj])
-                
-                if neighbors:
-                    elevation_grid[i, j] = np.mean(neighbors)
-                else:
-                    elevation_grid[i, j] = np.nanmean(valid_data)
-    
-    # Smooth the grid for professional-quality contours
-    if SCIPY_AVAILABLE:
-        try:
-            elevation_grid = gaussian_filter(elevation_grid, sigma=0.8)  # Slight smoothing
-        except:
-            pass
-    
-    # Calculate elevation range
-    min_elev = float(np.min(elevation_grid))
-    max_elev = float(np.max(elevation_grid))
-    
-    print(f"[CONTOURS_FAST] Elevation range: {min_elev:.1f}m - {max_elev:.1f}m (range: {max_elev - min_elev:.1f}m)")
-    
-    # Generate contour levels
-    min_level = math.floor(min_elev / interval) * interval
-    max_level = math.ceil(max_elev / interval) * interval
-    levels = np.arange(min_level, max_level + interval, interval)
-    
-    print(f"[CONTOURS_FAST] Generating {len(levels)} contour levels...")
-    
-    # PROFESSIONAL CONTOUR GENERATION using marching squares
-    features = []
-    min_elev_used = min_elev
-    max_elev_used = max_elev
-    
-    for level in levels:
-        if level < min_elev or level > max_elev:
-            continue
-        
-        # Determine if bold
-        is_bold = False
-        if bold_interval:
-            level_index = int((level - min_level) / interval)
-            is_bold = (level_index % bold_interval == 0)
-        
-        # Find all contour segments using marching squares
-        segments = []
-        
-        for i in range(len(lats) - 1):
-            for j in range(len(lons) - 1):
-                # Get cell corners
-                z00 = elevation_grid[i, j]
-                z01 = elevation_grid[i, j+1]
-                z10 = elevation_grid[i+1, j]
-                z11 = elevation_grid[i+1, j+1]
-                
-                # Check if contour crosses
-                cell_min = min(z00, z01, z10, z11)
-                cell_max = max(z00, z01, z10, z11)
-                
-                if not (cell_min <= level <= cell_max):
-                    continue
-                
-                # Cell coordinates
-                lat0, lat1 = float(lats[i]), float(lats[i+1])
-                lon0, lon1 = float(lons[j]), float(lons[j+1])
-                
-                # Interpolate crossing points (accurate linear interpolation)
-                edge_points = []
-                
-                # Top edge
-                if (z00 <= level <= z01) or (z01 <= level <= z00):
-                    if abs(z01 - z00) > 0.0001:
-                        t = (level - z00) / (z01 - z00)
-                        t = max(0, min(1, t))
-                        edge_points.append([lon0 + t * (lon1 - lon0), lat0])
-                
-                # Right edge
-                if (z01 <= level <= z11) or (z11 <= level <= z01):
-                    if abs(z11 - z01) > 0.0001:
-                        t = (level - z01) / (z11 - z01)
-                        t = max(0, min(1, t))
-                        edge_points.append([lon1, lat0 + t * (lat1 - lat0)])
-                
-                # Bottom edge
-                if (z10 <= level <= z11) or (z11 <= level <= z10):
-                    if abs(z11 - z10) > 0.0001:
-                        t = (level - z10) / (z11 - z10)
-                        t = max(0, min(1, t))
-                        edge_points.append([lon0 + t * (lon1 - lon0), lat1])
-                
-                # Left edge
-                if (z00 <= level <= z10) or (z10 <= level <= z00):
-                    if abs(z10 - z00) > 0.0001:
-                        t = (level - z00) / (z10 - z00)
-                        t = max(0, min(1, t))
-                        edge_points.append([lon0, lat0 + t * (lat1 - lat0)])
-                
-                # Add segment (contour crosses this cell)
-                if len(edge_points) == 2:
-                    segments.append({
-                        'p1': edge_points[0],
-                        'p2': edge_points[1],
-                        'cell': (i, j)
-                    })
-        
-        if len(segments) < 2:
-            continue
-        
-        # Connect segments into smooth continuous lines
-        lines = connect_segments_smoothly(segments, minx, miny, maxx, maxy)
-        
-        # Create features
-        for line in lines:
-            if len(line) < 3:
-                continue
-            
-            # Add elevation to coordinates
-            coords = [[p[0], p[1], float(level)] for p in line]
-            
-            # Color based on elevation
-            normalized = (level - min_elev_used) / (max_elev_used - min_elev_used) if max_elev_used > min_elev_used else 0.5
-            color = get_contour_color_professional(normalized)
-            
-            feature = {
-                "type": "Feature",
-                "geometry": {
-                    "type": "LineString",
-                    "coordinates": coords
-                },
-                "properties": {
-                    "elevation": float(level),
-                    "bold": is_bold,
-                    "weight": 3 if is_bold else 2,
-                    "color": color,
-                    "name": f"{int(level)}m contour",
-                    "label": f"{int(level)}m"
-                }
-            }
-            
-            features.append(feature)
-    
-    total_time = time.time() - start_time
-    print(f"[CONTOURS_FAST] ✅ Generated {len(features)} smooth contour features in {total_time:.2f}s")
-    
-    if len(features) == 0:
-        raise Exception("No contours generated")
-    
-    return {
-        "type": "FeatureCollection",
-        "features": features,
-        "properties": {
-            "interval": interval,
-            "bold_interval": bold_interval,
-            "count": len(features),
-            "bbox": bbox,
-            "min_elevation": min_elev_used,
-            "max_elevation": max_elev_used
-        }
-    }
+    # Calculate bounding box for DEM download (slightly larger for edge cases)
+    buffer = 0.01  # ~1km buffer
+    dem_bbox = (
+        minx - buffer,
+        miny - buffer,
+        maxx + buffer,
+        maxy + buffer
+    )
 
-def connect_segments_smoothly(segments, minx, miny, maxx, maxy):
-    """
-    Connect contour segments into smooth continuous lines
-    Uses proper line following algorithm for professional results
-    """
-    lines = []
-    used_segments = set()
+    # Download SRTM DEM with multiple tiles merged for better coverage
+    dem_path = None
+    dem_error = None
     
-    for start_idx, start_seg in enumerate(segments):
-        if start_idx in used_segments:
-            continue
+    try:
+        log(f"Downloading SRTM DEM tiles for area...")
+        dem_path = download_dem(center_lat, center_lon, bbox=dem_bbox)
         
-        # Start new line
-        line = []
-        current_seg = start_seg
-        used_segments.add(start_idx)
-        
-        # Add first point
-        line.append(current_seg['p1'])
-        current_point = current_seg['p2']
-        line.append(current_point)
-        
-        # Follow line forward
-        max_iterations = 2000
-        iterations = 0
-        
-        while iterations < max_iterations:
-            next_seg_idx = None
-            min_dist = float('inf')
-            
-            # Find connecting segment
-            for idx, seg in enumerate(segments):
-                if idx in used_segments:
-                    continue
+        # CRITICAL: Verify DEM has valid, varying elevation data (not uniform)
+        if dem_path and os.path.exists(dem_path):
+            with rasterio.open(dem_path) as src:
+                data = src.read(1)
+                valid_data = data[(data != src.nodata) & (data != 0) & ~np.isnan(data)]
                 
-                # Check both points of segment
-                for point in [seg['p1'], seg['p2']]:
-                    dist = math.sqrt((point[0] - current_point[0])**2 + (point[1] - current_point[1])**2)
-                    # Very tight threshold for connection
-                    if dist < 0.00001 and dist < min_dist:
-                        min_dist = dist
-                        next_seg_idx = idx
-                        next_seg = seg
-                        # Get the other point
-                        if dist < 0.00001:
-                            other_point = seg['p2'] if point == seg['p1'] else seg['p1']
-                        else:
-                            other_point = point
-            
-            if next_seg_idx is None:
-                break
-            
-            # Add next point
-            line.append(other_point)
-            current_point = other_point
-            used_segments.add(next_seg_idx)
-            iterations += 1
+                if len(valid_data) == 0:
+                    raise Exception("DEM contains no valid elevation data")
+                
+                # Check if data actually varies (not uniform - this is the key issue!)
+                data_std = np.std(valid_data)
+                data_range = np.max(valid_data) - np.min(valid_data)
+                
+                if data_std < 0.5 or data_range < 1.0:
+                    raise Exception(f"DEM data is uniform/invalid (std={data_std:.2f}m, range={data_range:.2f}m) - not real terrain")
+                
+                log(f"✅ DEM validated: {len(valid_data)} valid points, elevation range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m, std={data_std:.2f}m")
+                
+    except Exception as e:
+        dem_error = str(e)
+        log(f"❌ DEM download/validation failed: {dem_error}")
+        raise Exception(f"Cannot generate real terrain contours. DEM validation failed: {dem_error}. Please ensure elevation data sources are accessible and contain real terrain variation.")
+
+    # Use GDAL contour for professional-quality extraction
+    with tempfile.NamedTemporaryFile(suffix=".geojson", delete=False) as tmp:
+        out = tmp.name
         
-        # Try to extend backwards
-        if len(line) >= 2:
-            start_point = line[0]
-            while True:
-                found = False
-                for idx, seg in enumerate(segments):
-                    if idx in used_segments:
-                        continue
+        # Use gdal_contour with enhanced options for professional output
+        cmd = [
+            "gdal_contour",
+            "-i", str(interval),  # Contour interval in meters
+            "-f", "GeoJSON",
+            "-a", "elevation",  # Attribute name for elevation
+            "-3d",  # Include 3D coordinates (Z values)
+            "-snodata", "-32768",  # Handle no-data values
+            dem_path,
+            out
+        ]
+        
+        try:
+            log(f"Running GDAL contour extraction...")
+            result = subprocess.run(cmd, check=True, capture_output=True, text=True, timeout=120)
+            
+            with open(out) as f:
+                data = json.load(f)
+            
+            # Clean up temp file
+            try:
+                os.unlink(out)
+            except:
+                pass
+            
+            # Validate and enhance contour data
+            if data.get('type') == 'FeatureCollection' and len(data.get('features', [])) > 0:
+                log(f"✅ Generated {len(data['features'])} raw contour features")
+                
+                # First pass: collect all elevations for color normalization
+                elevations = []
+                for feature in data['features']:
+                    if 'properties' not in feature:
+                        feature['properties'] = {}
                     
-                    for point in [seg['p1'], seg['p2']]:
-                        dist = math.sqrt((point[0] - start_point[0])**2 + (point[1] - start_point[1])**2)
-                        if dist < 0.00001:
-                            other_point = seg['p2'] if point == seg['p1'] else seg['p1']
-                            line.insert(0, other_point)
-                            start_point = other_point
-                            used_segments.add(idx)
-                            found = True
-                            break
-                    if found:
-                        break
+                    # Extract elevation
+                    if 'elevation' not in feature['properties']:
+                        if 'ELEV' in feature['properties']:
+                            feature['properties']['elevation'] = feature['properties']['ELEV']
+                        else:
+                            coords = feature.get('geometry', {}).get('coordinates', [])
+                            if coords and len(coords[0]) > 2:
+                                z_values = [c[2] for c in coords[0] if len(c) > 2]
+                                if z_values:
+                                    feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
+                    
+                    elevation = feature['properties'].get('elevation')
+                    if elevation is not None:
+                        elevations.append(elevation)
                 
-                if not found:
-                    break
-        
-        # Filter to bbox
-        filtered_line = []
-        for point in line:
-            lon, lat = point[0], point[1]
-            if minx <= lon <= maxx and miny <= lat <= maxy:
-                filtered_line.append(point)
-        
-        if len(filtered_line) >= 3:
-            lines.append(filtered_line)
-    
-    return lines
+                # Calculate min/max for color normalization
+                min_elev = min(elevations) if elevations else None
+                max_elev = max(elevations) if elevations else None
+                
+                log(f"Elevation range: {min_elev}m - {max_elev}m")
+                
+                # Process and enhance each contour feature
+                enhanced_features = []
+                
+                for feature in data['features']:
+                    if 'properties' not in feature:
+                        feature['properties'] = {}
+                    
+                    # Ensure elevation property exists
+                    if 'elevation' not in feature['properties']:
+                        if 'ELEV' in feature['properties']:
+                            feature['properties']['elevation'] = feature['properties']['ELEV']
+                        else:
+                            # Try to extract from geometry Z coordinate
+                            coords = feature.get('geometry', {}).get('coordinates', [])
+                            if coords and len(coords[0]) > 2:
+                                # Average Z values for this line
+                                z_values = [c[2] for c in coords[0] if len(c) > 2]
+                                if z_values:
+                                    feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
+                    
+                    # Add name/label
+                    elevation = feature['properties'].get('elevation', 0)
+                    feature['properties']['name'] = f"{elevation}m"
+                    feature['properties']['label'] = f"{elevation}m"
+                    
+                    # Determine if this is a bold contour
+                    if bold_interval and elevation is not None:
+                        # Check if this elevation is a multiple of bold_interval
+                        if elevation % (interval * bold_interval) == 0:
+                            feature['properties']['bold'] = True
+                            feature['properties']['weight'] = 3  # Thicker line
+                        else:
+                            feature['properties']['bold'] = False
+                            feature['properties']['weight'] = 2
+                    else:
+                        feature['properties']['bold'] = False
+                        feature['properties']['weight'] = 2
+                    
+                    # Add color based on elevation with normalization (professional gradient)
+                    feature['properties']['color'] = get_contour_color(elevation, min_elev, max_elev)
+                    
+                    # Filter contours within bounding box
+                    coords = feature.get('geometry', {}).get('coordinates', [])
+                    if coords and len(coords) > 0:
+                        # Check if any coordinate is within bbox
+                        in_bbox = False
+                        for coord in coords[0] if isinstance(coords[0][0], list) else coords:
+                            lon, lat = coord[0], coord[1]
+                            if minx <= lon <= maxx and miny <= lat <= maxy:
+                                in_bbox = True
+                                break
+                        
+                        if in_bbox:
+                            enhanced_features.append(feature)
+                
+                # Update feature collection
+                data['features'] = enhanced_features
+                data['properties'] = {
+                    'interval': interval,
+                    'bold_interval': bold_interval,
+                    'count': len(enhanced_features),
+                    'bbox': bbox,
+                    'min_elevation': min_elev,
+                    'max_elevation': max_elev
+                }
+                
+                log(f"✅ Final: {len(enhanced_features)} contours within bbox")
+                
+                if len(enhanced_features) == 0:
+                    raise Exception("No contours found within bounding box")
+                
+                return data
+            else:
+                raise Exception("No valid contour features generated")
+                
+        except subprocess.TimeoutExpired:
+            try:
+                os.unlink(out)
+            except:
+                pass
+            raise Exception("Contour generation timed out (may be too large area)")
+        except subprocess.CalledProcessError as e:
+            # Clean up on error
+            try:
+                os.unlink(out)
+            except:
+                pass
+            error_msg = e.stderr if e.stderr else str(e)
+            log(f"❌ GDAL contour generation failed: {error_msg}")
+            raise Exception(f"GDAL contour generation failed: {error_msg}")
+        except FileNotFoundError:
+            raise Exception("GDAL not installed. Please install GDAL: apt-get install gdal-bin (Linux) or brew install gdal (Mac)")
 
-def get_contour_color_professional(normalized):
+def get_contour_color(elevation, min_elev=None, max_elev=None):
     """
-    Professional color gradient matching contourmap.app
-    Blue (low) -> Cyan -> Green -> Yellow -> Orange -> Red (high)
+    Get color for contour based on elevation with professional gradient
+    Matches contourmap.app exactly - blue (low) to red (high)
     """
-    normalized = max(0, min(1, normalized))
+    if elevation is None:
+        return '#3b82f6'  # Default blue
     
-    # Smooth color gradient (10 steps like contourmap.app)
-    if normalized < 0.1:
-        r, g, b = 0, 0, 200  # Dark blue
-    elif normalized < 0.2:
-        r, g, b = 0, 100, 255  # Blue
-    elif normalized < 0.3:
-        r, g, b = 0, 200, 255  # Cyan
-    elif normalized < 0.4:
-        r, g, b = 0, 255, 200  # Light cyan
-    elif normalized < 0.5:
-        r, g, b = 0, 255, 100  # Green
-    elif normalized < 0.6:
-        r, g, b = 100, 255, 0  # Yellow-green
-    elif normalized < 0.7:
-        r, g, b = 200, 255, 0  # Yellow
-    elif normalized < 0.8:
-        r, g, b = 255, 200, 0  # Orange-yellow
-    elif normalized < 0.9:
-        r, g, b = 255, 100, 0  # Orange
+    # Normalize elevation if min/max provided
+    if min_elev is not None and max_elev is not None and max_elev > min_elev:
+        normalized = (elevation - min_elev) / (max_elev - min_elev)
+        normalized = max(0, min(1, normalized))  # Clamp to 0-1
     else:
-        r, g, b = 255, 0, 0  # Red
+        # Use absolute elevation ranges
+        if elevation < 0:
+            normalized = 0
+        elif elevation < 500:
+            normalized = elevation / 500.0 * 0.3  # 0-0.3 for 0-500m
+        elif elevation < 2000:
+            normalized = 0.3 + (elevation - 500) / 1500.0 * 0.5  # 0.3-0.8 for 500-2000m
+        else:
+            normalized = 0.8 + min((elevation - 2000) / 3000.0, 0.2)  # 0.8-1.0 for 2000m+
+    
+    # Color gradient: Blue -> Cyan -> Green -> Yellow -> Orange -> Red
+    # Matches contourmap.app color scheme exactly
+    if normalized < 0.1:
+        # Dark blue (lowest)
+        r, g, b = 0, 0, 200
+    elif normalized < 0.2:
+        # Blue to Cyan
+        t = (normalized - 0.1) / 0.1
+        r, g, b = 0, int(100 * t), int(200 + 55 * t)
+    elif normalized < 0.3:
+        # Cyan
+        r, g, b = 0, 200, 255
+    elif normalized < 0.4:
+        # Cyan to Green
+        t = (normalized - 0.3) / 0.1
+        r, g, b = 0, int(200 + 55 * t), int(255 - 155 * t)
+    elif normalized < 0.5:
+        # Green
+        r, g, b = 0, 255, 100
+    elif normalized < 0.6:
+        # Green to Yellow
+        t = (normalized - 0.5) / 0.1
+        r, g, b = int(255 * t), 255, int(100 - 100 * t)
+    elif normalized < 0.7:
+        # Yellow
+        r, g, b = 255, 255, 0
+    elif normalized < 0.8:
+        # Yellow to Orange
+        t = (normalized - 0.7) / 0.1
+        r, g, b = 255, int(255 - 100 * t), 0
+    elif normalized < 0.9:
+        # Orange
+        r, g, b = 255, 155, 0
+    else:
+        # Orange to Red (highest)
+        t = (normalized - 0.9) / 0.1
+        r, g, b = 255, int(155 - 155 * t), 0
     
     return f"#{r:02x}{g:02x}{b:02x}"
