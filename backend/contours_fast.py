@@ -112,110 +112,128 @@ def generate_contours_fast(bbox, interval=5, bold_interval=None):
                     os.unlink(out)
                 except:
                     pass
+                    
+            except subprocess.TimeoutExpired:
+                try:
+                    os.unlink(out)
+                except:
+                    pass
+                raise Exception("Contour generation timed out (may be too large area)")
+            except subprocess.CalledProcessError as e:
+                # Clean up on error
+                try:
+                    os.unlink(out)
+                except:
+                    pass
+                error_msg = e.stderr if e.stderr else str(e)
+                log(f"❌ GDAL contour generation failed: {error_msg}")
+                # Fallback to Python method
+                log("Falling back to Python-based extraction...")
+                data = extract_contours_python(dem_path, bbox, interval, bold_interval)
     else:
         # Python-based contour extraction using scipy (fallback)
         log("Using Python-based contour extraction with scipy...")
         data = extract_contours_python(dem_path, bbox, interval, bold_interval)
-            
+    
     # Validate and enhance contour data
     if data.get('type') == 'FeatureCollection' and len(data.get('features', [])) > 0:
-                log(f"✅ Generated {len(data['features'])} raw contour features")
-                
-                # First pass: collect all elevations for color normalization
-                elevations = []
-                for feature in data['features']:
-                    if 'properties' not in feature:
-                        feature['properties'] = {}
-                    
-                    # Extract elevation
-                    if 'elevation' not in feature['properties']:
-                        if 'ELEV' in feature['properties']:
-                            feature['properties']['elevation'] = feature['properties']['ELEV']
-                        else:
-                            coords = feature.get('geometry', {}).get('coordinates', [])
-                            if coords and len(coords[0]) > 2:
-                                z_values = [c[2] for c in coords[0] if len(c) > 2]
-                                if z_values:
-                                    feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
-                    
-                    elevation = feature['properties'].get('elevation')
-                    if elevation is not None:
-                        elevations.append(elevation)
-                
-                # Calculate min/max for color normalization
-                min_elev = min(elevations) if elevations else None
-                max_elev = max(elevations) if elevations else None
-                
-                log(f"Elevation range: {min_elev}m - {max_elev}m")
-                
-                # Process and enhance each contour feature
-                enhanced_features = []
-                
-                for feature in data['features']:
-                    if 'properties' not in feature:
-                        feature['properties'] = {}
-                    
-                    # Ensure elevation property exists
-                    if 'elevation' not in feature['properties']:
-                        if 'ELEV' in feature['properties']:
-                            feature['properties']['elevation'] = feature['properties']['ELEV']
-                        else:
-                            # Try to extract from geometry Z coordinate
-                            coords = feature.get('geometry', {}).get('coordinates', [])
-                            if coords and len(coords[0]) > 2:
-                                # Average Z values for this line
-                                z_values = [c[2] for c in coords[0] if len(c) > 2]
-                                if z_values:
-                                    feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
-                    
-                    # Add name/label
-                    elevation = feature['properties'].get('elevation', 0)
-                    feature['properties']['name'] = f"{elevation}m"
-                    feature['properties']['label'] = f"{elevation}m"
-                    
-                    # Determine if this is a bold contour
-                    if bold_interval and elevation is not None:
-                        # Check if this elevation is a multiple of bold_interval
-                        if elevation % (interval * bold_interval) == 0:
-                            feature['properties']['bold'] = True
-                            feature['properties']['weight'] = 3  # Thicker line
-                        else:
-                            feature['properties']['bold'] = False
-                            feature['properties']['weight'] = 2
-                    else:
-                        feature['properties']['bold'] = False
-                        feature['properties']['weight'] = 2
-                    
-                    # Add color based on elevation with normalization (professional gradient)
-                    feature['properties']['color'] = get_contour_color(elevation, min_elev, max_elev)
-                    
-                    # Filter contours within bounding box
+        log(f"✅ Generated {len(data['features'])} raw contour features")
+        
+        # First pass: collect all elevations for color normalization
+        elevations = []
+        for feature in data['features']:
+            if 'properties' not in feature:
+                feature['properties'] = {}
+            
+            # Extract elevation
+            if 'elevation' not in feature['properties']:
+                if 'ELEV' in feature['properties']:
+                    feature['properties']['elevation'] = feature['properties']['ELEV']
+                else:
                     coords = feature.get('geometry', {}).get('coordinates', [])
-                    if coords and len(coords) > 0:
-                        # Check if any coordinate is within bbox
-                        in_bbox = False
-                        for coord in coords[0] if isinstance(coords[0][0], list) else coords:
-                            lon, lat = coord[0], coord[1]
-                            if minx <= lon <= maxx and miny <= lat <= maxy:
-                                in_bbox = True
-                                break
-                        
-                        if in_bbox:
-                            enhanced_features.append(feature)
+                    if coords and len(coords[0]) > 2:
+                        z_values = [c[2] for c in coords[0] if len(c) > 2]
+                        if z_values:
+                            feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
+            
+            elevation = feature['properties'].get('elevation')
+            if elevation is not None:
+                elevations.append(elevation)
+        
+        # Calculate min/max for color normalization
+        min_elev = min(elevations) if elevations else None
+        max_elev = max(elevations) if elevations else None
+        
+        log(f"Elevation range: {min_elev}m - {max_elev}m")
+        
+        # Process and enhance each contour feature
+        enhanced_features = []
+        
+        for feature in data['features']:
+            if 'properties' not in feature:
+                feature['properties'] = {}
+            
+            # Ensure elevation property exists
+            if 'elevation' not in feature['properties']:
+                if 'ELEV' in feature['properties']:
+                    feature['properties']['elevation'] = feature['properties']['ELEV']
+                else:
+                    # Try to extract from geometry Z coordinate
+                    coords = feature.get('geometry', {}).get('coordinates', [])
+                    if coords and len(coords[0]) > 2:
+                        # Average Z values for this line
+                        z_values = [c[2] for c in coords[0] if len(c) > 2]
+                        if z_values:
+                            feature['properties']['elevation'] = round(sum(z_values) / len(z_values))
+            
+            # Add name/label
+            elevation = feature['properties'].get('elevation', 0)
+            feature['properties']['name'] = f"{elevation}m"
+            feature['properties']['label'] = f"{elevation}m"
+            
+            # Determine if this is a bold contour
+            if bold_interval and elevation is not None:
+                # Check if this elevation is a multiple of bold_interval
+                if elevation % (interval * bold_interval) == 0:
+                    feature['properties']['bold'] = True
+                    feature['properties']['weight'] = 3  # Thicker line
+                else:
+                    feature['properties']['bold'] = False
+                    feature['properties']['weight'] = 2
+            else:
+                feature['properties']['bold'] = False
+                feature['properties']['weight'] = 2
+            
+            # Add color based on elevation with normalization (professional gradient)
+            feature['properties']['color'] = get_contour_color(elevation, min_elev, max_elev)
+            
+            # Filter contours within bounding box
+            coords = feature.get('geometry', {}).get('coordinates', [])
+            if coords and len(coords) > 0:
+                # Check if any coordinate is within bbox
+                in_bbox = False
+                for coord in coords[0] if isinstance(coords[0][0], list) else coords:
+                    lon, lat = coord[0], coord[1]
+                    if minx <= lon <= maxx and miny <= lat <= maxy:
+                        in_bbox = True
+                        break
                 
-                # Update feature collection
-                data['features'] = enhanced_features
-                data['properties'] = {
-                    'interval': interval,
-                    'bold_interval': bold_interval,
-                    'count': len(enhanced_features),
-                    'bbox': bbox,
-                    'min_elevation': min_elev,
-                    'max_elevation': max_elev
-                }
-                
-                log(f"✅ Final: {len(enhanced_features)} contours within bbox")
-                
+                if in_bbox:
+                    enhanced_features.append(feature)
+        
+        # Update feature collection
+        data['features'] = enhanced_features
+        data['properties'] = {
+            'interval': interval,
+            'bold_interval': bold_interval,
+            'count': len(enhanced_features),
+            'bbox': bbox,
+            'min_elevation': min_elev,
+            'max_elevation': max_elev
+        }
+        
+        log(f"✅ Final: {len(enhanced_features)} contours within bbox")
+        
         if len(enhanced_features) == 0:
             raise Exception("No contours found within bounding box")
         
@@ -235,127 +253,110 @@ def extract_contours_python(dem_path, bbox, interval, bold_interval):
     except ImportError:
         raise Exception("scipy and matplotlib required for Python-based contour extraction. Install: pip install scipy matplotlib")
     
-    minx, miny, maxx, maxy = map(float, bbox.split(","))
-    
-    # Read DEM
-    with rasterio.open(dem_path) as src:
-        data = src.read(1)
-        transform = src.transform
-        bounds = src.bounds
+    try:
+        minx, miny, maxx, maxy = map(float, bbox.split(","))
         
-        # Get coordinates
-        height, width = data.shape
-        x = np.linspace(bounds.left, bounds.right, width)
-        y = np.linspace(bounds.bottom, bounds.top, height)
-        X, Y = np.meshgrid(x, y)
-        
-        # Filter to bbox
-        mask = (X >= minx) & (X <= maxx) & (Y >= miny) & (Y <= maxy)
-        if not np.any(mask):
-            raise Exception("No data in bounding box")
-        
-        # Get elevation range
-        valid_data = data[~np.isnan(data) & (data != src.nodata)]
-        if len(valid_data) == 0:
-            raise Exception("No valid elevation data")
-        
-        min_elev = float(np.min(valid_data))
-        max_elev = float(np.max(valid_data))
-        
-        # Generate contour levels
-        min_level = math.floor(min_elev / interval) * interval
-        max_level = math.ceil(max_elev / interval) * interval
-        levels = np.arange(min_level, max_level + interval, interval)
-        
-        log(f"Extracting {len(levels)} contour levels using Python...")
-        
-        # Use matplotlib's contour generator (CONREC algorithm)
-        features = []
-        
-        for level in levels:
-            if level < min_elev or level > max_elev:
-                continue
+        # Read DEM
+        with rasterio.open(dem_path) as src:
+            data = src.read(1)
+            transform = src.transform
+            bounds = src.bounds
             
-            # Determine if bold
-            is_bold = False
-            if bold_interval:
-                level_index = int((level - min_level) / interval)
-                is_bold = (level_index % bold_interval == 0)
+            # Get coordinates
+            height, width = data.shape
+            x = np.linspace(bounds.left, bounds.right, width)
+            y = np.linspace(bounds.bottom, bounds.top, height)
+            X, Y = np.meshgrid(x, y)
             
-            # Generate contours for this level
-            contour_gen = QuadContourGenerator(X, Y, data, None, True, 0)
-            contour_lines = contour_gen.create_contour(level)
+            # Filter to bbox
+            mask = (X >= minx) & (X <= maxx) & (Y >= miny) & (Y <= maxy)
+            if not np.any(mask):
+                raise Exception("No data in bounding box")
             
-            for line in contour_lines:
-                if len(line) < 3:
+            # Get elevation range
+            valid_data = data[~np.isnan(data) & (data != src.nodata)]
+            if len(valid_data) == 0:
+                raise Exception("No valid elevation data")
+            
+            min_elev = float(np.min(valid_data))
+            max_elev = float(np.max(valid_data))
+            
+            # Generate contour levels
+            min_level = math.floor(min_elev / interval) * interval
+            max_level = math.ceil(max_elev / interval) * interval
+            levels = np.arange(min_level, max_level + interval, interval)
+            
+            log(f"Extracting {len(levels)} contour levels using Python...")
+            
+            # Use matplotlib's contour generator (CONREC algorithm)
+            features = []
+            
+            for level in levels:
+                if level < min_elev or level > max_elev:
                     continue
                 
-                # Filter to bbox
-                filtered_coords = []
-                for point in line:
-                    lon, lat = point[0], point[1]
-                    if minx <= lon <= maxx and miny <= lat <= maxy:
-                        filtered_coords.append([lon, lat, float(level)])
+                # Determine if bold
+                is_bold = False
+                if bold_interval:
+                    level_index = int((level - min_level) / interval)
+                    is_bold = (level_index % bold_interval == 0)
                 
-                if len(filtered_coords) < 3:
-                    continue
+                # Generate contours for this level
+                contour_gen = QuadContourGenerator(X, Y, data, None, True, 0)
+                contour_lines = contour_gen.create_contour(level)
                 
-                # Add color
-                normalized = (level - min_elev) / (max_elev - min_elev) if max_elev > min_elev else 0.5
-                color = get_contour_color(level, min_elev, max_elev)
-                
-                feature = {
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "LineString",
-                        "coordinates": filtered_coords
-                    },
-                    "properties": {
-                        "elevation": float(level),
-                        "bold": is_bold,
-                        "weight": 3 if is_bold else 2,
-                        "color": color,
-                        "name": f"{int(level)}m",
-                        "label": f"{int(level)}m"
+                for line in contour_lines:
+                    if len(line) < 3:
+                        continue
+                    
+                    # Filter to bbox
+                    filtered_coords = []
+                    for point in line:
+                        lon, lat = point[0], point[1]
+                        if minx <= lon <= maxx and miny <= lat <= maxy:
+                            filtered_coords.append([lon, lat, float(level)])
+                    
+                    if len(filtered_coords) < 3:
+                        continue
+                    
+                    # Add color
+                    normalized = (level - min_elev) / (max_elev - min_elev) if max_elev > min_elev else 0.5
+                    color = get_contour_color(level, min_elev, max_elev)
+                    
+                    feature = {
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "LineString",
+                            "coordinates": filtered_coords
+                        },
+                        "properties": {
+                            "elevation": float(level),
+                            "bold": is_bold,
+                            "weight": 3 if is_bold else 2,
+                            "color": color,
+                            "name": f"{int(level)}m",
+                            "label": f"{int(level)}m"
+                        }
                     }
+                    
+                    features.append(feature)
+            
+            return {
+                "type": "FeatureCollection",
+                "features": features,
+                "properties": {
+                    "interval": interval,
+                    "bold_interval": bold_interval,
+                    "count": len(features),
+                    "bbox": bbox,
+                    "min_elevation": min_elev,
+                    "max_elevation": max_elev
                 }
-                
-                features.append(feature)
-        
-        return {
-            "type": "FeatureCollection",
-            "features": features,
-            "properties": {
-                "interval": interval,
-                "bold_interval": bold_interval,
-                "count": len(features),
-                "bbox": bbox,
-                "min_elevation": min_elev,
-                "max_elevation": max_elev
             }
-        }
     
     except Exception as e:
         log(f"❌ Python contour extraction failed: {e}")
         raise
-                
-        except subprocess.TimeoutExpired:
-            try:
-                os.unlink(out)
-            except:
-                pass
-            raise Exception("Contour generation timed out (may be too large area)")
-        except subprocess.CalledProcessError as e:
-            # Clean up on error
-            try:
-                os.unlink(out)
-            except:
-                pass
-            error_msg = e.stderr if e.stderr else str(e)
-            log(f"❌ GDAL contour generation failed: {error_msg}")
-            raise Exception(f"GDAL contour generation failed: {error_msg}")
-        except FileNotFoundError:
-            raise Exception("GDAL not installed. Please install GDAL: apt-get install gdal-bin (Linux) or brew install gdal (Mac)")
 
 def get_contour_color(elevation, min_elev=None, max_elev=None):
     """
