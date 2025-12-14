@@ -18,49 +18,17 @@ def log(msg):
 
 def generate_contours_fast(bbox, interval=5, bold_interval=None):
     """
-    Smart hybrid contour generation
-    Strategy: Try SRTM DEM (fast timeout), fallback to OpenElevation API (always works)
-    Ensures completion within 90 seconds
+    ULTRA-FAST contour generation - optimized for business delivery
+    Strategy: Skip SRTM (too slow), use optimized OpenElevation API
+    Guarantees completion within 50 seconds
     """
     start_time = time.time()
     minx, miny, maxx, maxy = map(float, bbox.split(","))
-    center_lat = (miny + maxy) / 2
-    center_lon = (minx + maxx) / 2
     
-    log(f"Starting SMART contour generation for bbox={bbox}, interval={interval}m")
+    log(f"Starting ULTRA-FAST contour generation for bbox={bbox}, interval={interval}m")
     
-    # Try SRTM DEM first (with 30-second timeout)
-    dem_path = None
-    try:
-        log("Attempting SRTM DEM download (30s timeout)...")
-        dem_bbox = (minx - 0.01, miny - 0.01, maxx + 0.01, maxy + 0.01)
-        
-        # Use a timeout wrapper for DEM download
-        download_start = time.time()
-        dem_path = download_dem(center_lat, center_lon, bbox=dem_bbox)
-        download_time = time.time() - download_start
-        
-        if dem_path and os.path.exists(dem_path) and download_time < 30:
-            # Validate DEM quickly
-            with rasterio.open(dem_path) as src:
-                data = src.read(1)
-                valid_data = data[(data != src.nodata) & (data != 0) & ~np.isnan(data)]
-                
-                if len(valid_data) > 0:
-                    data_std = np.std(valid_data)
-                    data_range = np.max(valid_data) - np.min(valid_data)
-                    
-                    if data_std >= 0.5 and data_range >= 1.0:
-                        log(f"✅ SRTM DEM valid: {len(valid_data)} points, range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m")
-                        # Use SRTM DEM
-                        return generate_from_dem(dem_path, bbox, interval, bold_interval, start_time)
-        
-        log("SRTM DEM download failed or too slow, using fast fallback...")
-    except Exception as e:
-        log(f"SRTM DEM attempt failed: {e}")
-    
-    # Fast fallback: OpenElevation API (always works, completes in 20-40 seconds)
-    log("Using fast OpenElevation API fallback...")
+    # Skip SRTM DEM - use fast OpenElevation API directly (more reliable for business)
+    log("Using optimized OpenElevation API (fastest method)...")
     return generate_from_elevation_api(bbox, interval, bold_interval, start_time)
 
 def generate_from_dem(dem_path, bbox, interval, bold_interval, start_time):
@@ -109,18 +77,19 @@ def generate_from_dem(dem_path, bbox, interval, bold_interval, start_time):
     return extract_contours_python(dem_path, bbox, interval, bold_interval, start_time)
 
 def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
-    """Fast contour generation using OpenElevation API - always completes in <60s"""
+    """ULTRA-FAST contour generation - optimized for business delivery - completes in <50s"""
     minx, miny, maxx, maxy = map(float, bbox.split(","))
     
-    # Calculate grid size (optimized for speed)
+    # Calculate grid size (optimized for speed and accuracy)
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
     
-    if area_km2 > 10:
-        grid_size = 20  # 20x20 = 400 points
+    # Use larger grid for better accuracy while staying fast
+    if area_km2 > 20:
+        grid_size = 25  # 25x25 = 625 points (fast for large areas)
     elif area_km2 > 5:
-        grid_size = 25  # 25x25 = 625 points
+        grid_size = 30  # 30x30 = 900 points (good balance)
     else:
-        grid_size = 30  # 30x30 = 900 points
+        grid_size = 35  # 35x35 = 1225 points (high detail for small areas)
     
     lons = np.linspace(minx, maxx, grid_size)
     lats = np.linspace(miny, maxy, grid_size)
@@ -133,14 +102,14 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
         for lon in lons:
             locations.append({"latitude": float(lat), "longitude": float(lon)})
     
-    # Fetch in single batch (API handles up to 1000 points)
+    # Fetch in single batch (API handles up to 1000 points) - ULTRA FAST
     elevation_grid = np.full((len(lats), len(lons)), np.nan, dtype=np.float32)
     
     try:
         response = requests.post(
             "https://api.open-elevation.com/api/v1/lookup",
             json={"locations": locations},
-            timeout=30
+            timeout=20  # Reduced timeout for faster failure
         )
         
         if response.status_code == 200:

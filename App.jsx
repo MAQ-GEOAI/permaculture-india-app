@@ -1236,12 +1236,12 @@ const App = () => {
       return;
     }
     
-    // Global timeout for entire analysis (2 minutes max - fast method should be much quicker)
+    // Global timeout for entire analysis (90 seconds max - optimized method)
     const analysisTimeout = setTimeout(() => {
-      logError('Analysis timed out after 2 minutes');
+      logError('Analysis timed out after 90 seconds');
       showToast('Analysis timed out. Try a smaller area or check backend logs.', 'error');
       setIsAnalyzing(false);
-    }, 120000); // 2 minutes
+    }, 90000); // 90 seconds
     
     try {
       // Test backend health with short timeout (don't block if slow)
@@ -1311,14 +1311,14 @@ const App = () => {
       }
       
       // Fetch all layers in parallel with timeouts - with progress tracking
-      showToast('Fetching terrain data from backend (SRTM DEM processing may take 30-90 seconds)...', 'info');
+      showToast('Fetching terrain data from backend (should complete in 20-50 seconds)...', 'info');
       log('Starting parallel backend requests...');
       log(`Backend URL: ${BACKEND_URL}`);
       log(`Contour URL: ${contourUrl}`);
       
       // SRTM DEM method - may take 30-90 seconds (downloading tiles, GDAL processing)
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetchWithTimeout(contourUrl, 120000).catch(e => { // 2 minutes for SRTM DEM contours
+        fetchWithTimeout(contourUrl, 60000).catch(e => { // 1 minute for fast contours
           logWarn('Contours request failed:', e);
           throw e;
         }),
