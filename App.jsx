@@ -3614,7 +3614,7 @@ const App = () => {
           width: mapWidth,
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
-          allowTaint: false, // CRITICAL: Set to false when useCORS is true for tile capture
+          allowTaint: true, // Can be true now since we convert tiles to data URLs
           foreignObjectRendering: true, // Enable for better SVG/contour support
           removeContainer: false,
           imageTimeout: 60000, // Longer timeout for tiles
