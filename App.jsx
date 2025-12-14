@@ -2692,6 +2692,33 @@ const App = () => {
       try {
         map.removeLayer(layerRefs.current.contours);
         map.addLayer(layerRefs.current.contours);
+        
+        // Force each contour line to redraw with visible strokes
+        layerRefs.current.contours.eachLayer((layer) => {
+          if (layer instanceof L.Polyline) {
+            layer.redraw();
+            // Ensure stroke is visible on the actual DOM path
+            const path = layer._path;
+            if (path) {
+              const weight = layer.options.weight || 3;
+              const color = layer.options.color || '#22c55e';
+              const opacity = layer.options.opacity || 0.9;
+              
+              path.style.strokeWidth = Math.max(4, weight) + 'px'; // Minimum 4px for export
+              path.style.stroke = color;
+              path.style.strokeOpacity = opacity.toString();
+              path.style.opacity = '1';
+              path.style.visibility = 'visible';
+              path.style.fill = 'none';
+              
+              // Set attributes too for html2canvas
+              path.setAttribute('stroke-width', Math.max(4, weight).toString());
+              path.setAttribute('stroke', color);
+              path.setAttribute('stroke-opacity', opacity.toString());
+              path.setAttribute('fill', 'none');
+            }
+          }
+        });
       } catch (e) {
         logWarn('Error refreshing contours layer:', e);
       }
@@ -2716,11 +2743,54 @@ const App = () => {
     map.invalidateSize();
     map._onResize();
     
-    // CRITICAL: Force map to redraw all SVG overlays (contours)
+    // CRITICAL: Force map to redraw all SVG overlays (contours) with visible strokes
     map.eachLayer((layer) => {
-      if (layer instanceof L.Polyline || layer instanceof L.FeatureGroup) {
+      if (layer instanceof L.Polyline) {
         try {
           layer.redraw();
+          // Ensure path is visible with proper stroke
+          const path = layer._path;
+          if (path) {
+            const weight = layer.options.weight || 3;
+            const color = layer.options.color || '#22c55e';
+            const opacity = layer.options.opacity || 0.9;
+            
+            path.style.strokeWidth = Math.max(4, weight) + 'px';
+            path.style.stroke = color;
+            path.style.strokeOpacity = opacity.toString();
+            path.style.opacity = '1';
+            path.style.visibility = 'visible';
+            path.style.fill = 'none';
+            path.setAttribute('stroke-width', Math.max(4, weight).toString());
+            path.setAttribute('stroke', color);
+            path.setAttribute('stroke-opacity', opacity.toString());
+            path.setAttribute('fill', 'none');
+          }
+        } catch (e) {}
+      } else if (layer instanceof L.FeatureGroup) {
+        try {
+          layer.redraw();
+          // Force redraw all polylines in feature group
+          layer.eachLayer((sublayer) => {
+            if (sublayer instanceof L.Polyline) {
+              sublayer.redraw();
+              const path = sublayer._path;
+              if (path) {
+                const weight = sublayer.options.weight || 3;
+                const color = sublayer.options.color || '#22c55e';
+                const opacity = sublayer.options.opacity || 0.9;
+                
+                path.style.strokeWidth = Math.max(4, weight) + 'px';
+                path.style.stroke = color;
+                path.style.strokeOpacity = opacity.toString();
+                path.style.opacity = '1';
+                path.style.visibility = 'visible';
+                path.setAttribute('stroke-width', Math.max(4, weight).toString());
+                path.setAttribute('stroke', color);
+                path.setAttribute('stroke-opacity', opacity.toString());
+              }
+            }
+          });
         } catch (e) {}
       }
     });
