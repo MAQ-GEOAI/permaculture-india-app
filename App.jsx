@@ -2916,6 +2916,24 @@ const App = () => {
           }
         }
         
+        // CRITICAL: Force SVG to render as images for html2canvas compatibility
+        // Convert all SVG paths to canvas-compatible format
+        const allSvgs = mapContainer.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
+        allSvgs.forEach((svg) => {
+          // Ensure SVG has proper viewBox and dimensions
+          if (!svg.getAttribute('viewBox')) {
+            const bbox = svg.getBBox();
+            svg.setAttribute('viewBox', `${bbox.x} ${bbox.y} ${bbox.width} ${bbox.height}`);
+          }
+          // Force SVG to be visible and rendered
+          svg.style.visibility = 'visible';
+          svg.style.opacity = '1';
+          svg.style.display = 'block';
+        });
+        
+        // Additional wait for SVG rendering
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
         // Capture with better options for Leaflet maps
         const canvas = await html2canvas(mapContainer, {
           backgroundColor: '#ffffff', // White background instead of transparent
@@ -2925,7 +2943,7 @@ const App = () => {
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
           allowTaint: true,
-          foreignObjectRendering: false, // Better for Leaflet
+          foreignObjectRendering: true, // Enable for better SVG support
           removeContainer: false,
           imageTimeout: 60000, // Longer timeout for tiles
           proxy: undefined,
@@ -3525,7 +3543,7 @@ const App = () => {
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
           allowTaint: true,
-          foreignObjectRendering: false, // Better for Leaflet
+          foreignObjectRendering: true, // Enable for better SVG/contour support
           removeContainer: false,
           imageTimeout: 60000, // Longer timeout for tiles
           onclone: async (clonedDoc) => {
