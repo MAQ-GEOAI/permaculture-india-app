@@ -49,11 +49,25 @@ def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
     Args:
         bbox: Bounding box "minx,miny,maxx,maxy"
         interval: Contour interval in meters (0.5, 1, 2, 5, 10, 20, 50, 100)
-        bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour)
+        bold_interval: Every Nth contour to make bold (e.g., 5 = every 5th contour). Use None or 0 for no bold.
     """
     import time
     start_time = time.time()
-    print(f"[CONTOURS ENDPOINT] Starting FAST contour generation for bbox={bbox}, interval={interval}")
+    
+    # Validate interval
+    if interval <= 0:
+        return {
+            "type": "FeatureCollection",
+            "features": [],
+            "error": f"Invalid contour interval: {interval}. Must be > 0.",
+            "processing_time_seconds": 0
+        }
+    
+    # Normalize bold_interval (0 or None means no bold)
+    if bold_interval is not None and bold_interval <= 0:
+        bold_interval = None
+    
+    print(f"[CONTOURS ENDPOINT] Starting FAST contour generation for bbox={bbox}, interval={interval}m, bold_interval={bold_interval}")
     
     try:
         # Always use fast method - optimized for production

@@ -1264,7 +1264,9 @@ const App = () => {
       
       // NEW APPROACH: Use OpenTopoMap contour tile overlay instead of generating from DEM
       // This provides pre-generated, real terrain contours
-      const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval ? `&bold_interval=${contourBoldInterval}` : ''}`;
+      // Build contour URL with proper bold_interval handling (0 means no bold)
+      const boldParam = (contourBoldInterval && contourBoldInterval > 0) ? `&bold_interval=${contourBoldInterval}` : '';
+      const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${boldParam}`;
       
       // Helper function to add timeout to fetch - bulletproof version
       const fetchWithTimeout = (url, timeout = 120000) => {
@@ -4717,7 +4719,7 @@ const App = () => {
                       }
                       
                       const response = await fetch(
-                        `${BACKEND_URL}/contours/export?bbox=${bbox}&interval=${contourInterval}&bold_interval=${contourBoldInterval}&format=kml`
+                        `${BACKEND_URL}/contours/export?bbox=${bbox}&interval=${contourInterval}${contourBoldInterval && contourBoldInterval > 0 ? `&bold_interval=${contourBoldInterval}` : ''}&format=kml`
                       );
                       
                       if (response.ok) {
