@@ -2687,6 +2687,16 @@ const App = () => {
     // Force map to redraw all layers
     map.invalidateSize();
     
+    // CRITICAL: Force all layers to redraw, especially contours
+    if (layerRefs.current.contours) {
+      try {
+        map.removeLayer(layerRefs.current.contours);
+        map.addLayer(layerRefs.current.contours);
+      } catch (e) {
+        logWarn('Error refreshing contours layer:', e);
+      }
+    }
+    
     // Wait for map to be ready
     await new Promise((resolve) => {
       if (map) {
@@ -2706,8 +2716,17 @@ const App = () => {
     map.invalidateSize();
     map._onResize();
     
-    // Wait longer for satellite imagery to load
-    await new Promise(resolve => setTimeout(resolve, 3000));
+    // CRITICAL: Force map to redraw all SVG overlays (contours)
+    map.eachLayer((layer) => {
+      if (layer instanceof L.Polyline || layer instanceof L.FeatureGroup) {
+        try {
+          layer.redraw();
+        } catch (e) {}
+      }
+    });
+    
+    // Wait longer for satellite imagery and overlays to load
+    await new Promise(resolve => setTimeout(resolve, 2000));
   };
   
   const exportMapPNG = async () => {
