@@ -2792,12 +2792,24 @@ const App = () => {
         mapContainer.style.width = mapWidth + 'px';
         mapContainer.style.height = mapHeight + 'px';
         mapContainer.style.overflow = 'visible';
+        // DO NOT set transform on container - preserve Leaflet's coordinate system
         
         // Force map to redraw and ensure tiles are loaded
         if (mapInstanceRef.current) {
+          // CRITICAL: Ensure map is at correct zoom/position before export
+          const currentCenter = mapInstanceRef.current.getCenter();
+          const currentZoom = mapInstanceRef.current.getZoom();
           mapInstanceRef.current.invalidateSize();
           // Wait for map to update
           await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          // Ensure map hasn't shifted
+          const newCenter = mapInstanceRef.current.getCenter();
+          if (Math.abs(newCenter.lat - currentCenter.lat) > 0.0001 || 
+              Math.abs(newCenter.lng - currentCenter.lng) > 0.0001) {
+            mapInstanceRef.current.setView(currentCenter, currentZoom);
+            await new Promise(resolve => setTimeout(resolve, 500));
+          }
           
           // Check if tiles are loaded
           const tiles = mapContainer.querySelectorAll('img.leaflet-tile');
