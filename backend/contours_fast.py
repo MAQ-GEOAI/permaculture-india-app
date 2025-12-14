@@ -80,16 +80,21 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
     """ULTRA-FAST contour generation - optimized for business delivery - completes in <50s"""
     minx, miny, maxx, maxy = map(float, bbox.split(","))
     
-    # Calculate grid size (optimized for speed - business delivery)
+    # Calculate grid size (optimized for ACCURACY - business needs accurate contours)
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
     
-    # Use smaller grid for faster completion - business needs speed
+    # Use HIGHER resolution for accuracy - match contourmap.app quality
     if area_km2 > 20:
-        grid_size = 20  # 20x20 = 400 points (fast for large areas)
+        grid_size = 40  # 40x40 = 1600 points (accurate for large areas)
+    elif area_km2 > 10:
+        grid_size = 50  # 50x50 = 2500 points (high accuracy)
     elif area_km2 > 5:
-        grid_size = 22  # 22x22 = 484 points (good balance)
+        grid_size = 60  # 60x60 = 3600 points (very high accuracy)
     else:
-        grid_size = 25  # 25x25 = 625 points (reasonable detail for small areas)
+        grid_size = 70  # 70x70 = 4900 points (maximum accuracy for small areas)
+    
+    # Cap at 100x100 = 10000 points (API limit)
+    grid_size = min(grid_size, 100)
     
     lons = np.linspace(minx, maxx, grid_size)
     lats = np.linspace(miny, maxy, grid_size)
@@ -102,37 +107,79 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
         for lon in lons:
             locations.append({"latitude": float(lat), "longitude": float(lon)})
     
-    # Fetch in single batch (API handles up to 1000 points) - ULTRA FAST
+    # Fetch in batches (API handles up to 1000 points per request)
     elevation_grid = np.full((len(lats), len(lons)), np.nan, dtype=np.float32)
     
+    batch_size = 1000  # API limit
+    total_points = len(locations)
+    
     try:
-        response = requests.post(
-            "https://api.open-elevation.com/api/v1/lookup",
-            json={"locations": locations},
-            timeout=20  # Reduced timeout for faster failure
-        )
-        
-        if response.status_code == 200:
-            results = response.json().get('results', [])
-            for idx, result in enumerate(results):
-                if idx < len(locations):
-                    elev = result.get('elevation')
-                    if elev is not None and elev != -32768:
-                        loc = locations[idx]
-                        lat_idx = np.argmin(np.abs(lats - loc['latitude']))
-                        lon_idx = np.argmin(np.abs(lons - loc['longitude']))
-                        elevation_grid[lat_idx, lon_idx] = float(elev)
+        for batch_start in range(0, total_points, batch_size):
+            batch = locations[batch_start:batch_start + batch_size]
+            log(f"Fetching batch {batch_start//batch_size + 1}/{(total_points + batch_size - 1)//batch_size} ({len(batch)} points)...")
+            
+            response = requests.post(
+                "https://api.open-elevation.com/api/v1/lookup",
+                json={"locations": batch},
+                timeout=30
+            )
+            
+            if response.status_code == 200:
+                results = response.json().get('results', [])
+                for idx, result in enumerate(results):
+                    if batch_start + idx < len(locations):
+                        elev = result.get('elevation')
+                        if elev is not None and elev != -32768:
+                            loc = locations[batch_start + idx]
+                            lat_idx = np.argmin(np.abs(lats - loc['latitude']))
+                            lon_idx = np.argmin(np.abs(lons - loc['longitude']))
+                            elevation_grid[lat_idx, lon_idx] = float(elev)
+            else:
+                log(f"API returned status {response.status_code} for batch {batch_start//batch_size + 1}")
     except Exception as e:
         log(f"Elevation API failed: {e}")
         raise Exception(f"Failed to fetch elevation data: {e}")
     
-    # Fill NaN
+    # Fill NaN with interpolation
     valid_data = elevation_grid[~np.isnan(elevation_grid)]
     if len(valid_data) < 10:
         raise Exception("Insufficient elevation data")
     
-    mean_elev = np.nanmean(elevation_grid)
-    elevation_grid[np.isnan(elevation_grid)] = mean_elev
+    # Use scipy for better interpolation if available
+    try:
+        from scipy.interpolate import griddata
+        from scipy.ndimage import gaussian_filter
+        
+        # Interpolate missing values
+        if np.any(np.isnan(elevation_grid)):
+            valid_mask = ~np.isnan(elevation_grid)
+            valid_lats = np.array([lats[i] for i in range(len(lats)) for j in range(len(lons)) if valid_mask[i, j]])
+            valid_lons = np.array([lons[j] for i in range(len(lats)) for j in range(len(lons)) if valid_mask[i, j]])
+            valid_elevs = elevation_grid[valid_mask]
+            
+            nan_mask = np.isnan(elevation_grid)
+            nan_lats = np.array([lats[i] for i in range(len(lats)) for j in range(len(lons)) if nan_mask[i, j]])
+            nan_lons = np.array([lons[j] for i in range(len(lats)) for j in range(len(lons)) if nan_mask[i, j]])
+            
+            if len(nan_lats) > 0:
+                interpolated = griddata(
+                    (valid_lats, valid_lons),
+                    valid_elevs,
+                    (nan_lats, nan_lons),
+                    method='cubic',
+                    fill_value=np.nanmean(valid_elevs)
+                )
+                for idx, (i, j) in enumerate([(i, j) for i in range(len(lats)) for j in range(len(lons)) if nan_mask[i, j]]):
+                    elevation_grid[i, j] = interpolated[idx]
+        
+        # Smooth the elevation grid for better contours
+        elevation_grid = gaussian_filter(elevation_grid, sigma=0.5)
+        log("Applied scipy interpolation and smoothing for accuracy")
+    except ImportError:
+        # Fallback: simple mean fill
+        mean_elev = np.nanmean(elevation_grid)
+        elevation_grid[np.isnan(elevation_grid)] = mean_elev
+        log("Using simple mean fill (scipy not available)")
     
     # Generate contours using Python
     min_elev = float(np.min(elevation_grid))
@@ -244,7 +291,10 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
     }
 
 def connect_segments(segments, minx, miny, maxx, maxy):
-    """Connect contour segments into lines"""
+    """Connect contour segments into smooth continuous lines - improved algorithm"""
+    if not segments:
+        return []
+    
     lines = []
     used = set()
     
@@ -252,24 +302,30 @@ def connect_segments(segments, minx, miny, maxx, maxy):
         if start_idx in used:
             continue
         
+        # Start a new line
         line = [seg['p1'], seg['p2']]
         used.add(start_idx)
         current = seg['p2']
+        start_point = seg['p1']
         
-        max_iter = 500
+        max_iter = 2000  # Increased for longer lines
         iter = 0
         
+        # Connect forward
         while iter < max_iter:
             next_idx = None
             min_dist = float('inf')
+            next_point = None
             
             for idx, s in enumerate(segments):
                 if idx in used:
                     continue
                 
+                # Check both endpoints
                 for point in [s['p1'], s['p2']]:
                     dist = math.sqrt((point[0] - current[0])**2 + (point[1] - current[1])**2)
-                    if dist < 0.0001 and dist < min_dist:
+                    # Tighter threshold for better connection
+                    if dist < 0.00005 and dist < min_dist:  # ~5.5m tolerance
                         min_dist = dist
                         next_idx = idx
                         next_seg = s
@@ -283,7 +339,35 @@ def connect_segments(segments, minx, miny, maxx, maxy):
             used.add(next_idx)
             iter += 1
         
-        # Filter to bbox
+        # Try to extend backwards
+        current = start_point
+        iter = 0
+        while iter < max_iter:
+            next_idx = None
+            min_dist = float('inf')
+            next_point = None
+            
+            for idx, s in enumerate(segments):
+                if idx in used:
+                    continue
+                
+                for point in [s['p1'], s['p2']]:
+                    dist = math.sqrt((point[0] - current[0])**2 + (point[1] - current[1])**2)
+                    if dist < 0.00005 and dist < min_dist:
+                        min_dist = dist
+                        next_idx = idx
+                        next_seg = s
+                        next_point = s['p2'] if point == s['p1'] else s['p1']
+            
+            if next_idx is None:
+                break
+            
+            line.insert(0, next_point)  # Add at beginning
+            current = next_point
+            used.add(next_idx)
+            iter += 1
+        
+        # Filter to bbox and ensure minimum length
         filtered = []
         for p in line:
             if minx <= p[0] <= maxx and miny <= p[1] <= maxy:
