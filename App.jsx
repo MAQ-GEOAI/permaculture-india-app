@@ -2934,18 +2934,32 @@ const App = () => {
         // Additional wait for SVG rendering
         await new Promise(resolve => setTimeout(resolve, 500));
         
+        // CRITICAL: Verify tiles are actually loaded before capture
+        const finalTileCheck = mapContainer.querySelectorAll('img.leaflet-tile');
+        const loadedFinalTiles = Array.from(finalTileCheck).filter(tile => 
+          tile.complete && tile.naturalWidth > 0 && tile.naturalHeight > 0
+        );
+        console.log(`[EXPORT] Final tile check: ${loadedFinalTiles.length}/${finalTileCheck.length} tiles loaded`);
+        
+        if (loadedFinalTiles.length === 0) {
+          showToast('Warning: No map tiles loaded. Export may be blank.', 'warning');
+        }
+        
+        // Additional wait to ensure all rendering is complete
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        
         // Capture with better options for Leaflet maps
         const canvas = await html2canvas(mapContainer, {
           backgroundColor: '#ffffff', // White background instead of transparent
-          useCORS: true,
-          logging: false, // Disable logging for production
+          useCORS: true, // CRITICAL: Enable CORS for tile images
+          logging: true, // Enable logging to debug tile loading
           width: mapWidth,
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
-          allowTaint: true,
+          allowTaint: false, // CRITICAL: Set to false when useCORS is true
           foreignObjectRendering: true, // Enable for better SVG support
           removeContainer: false,
-          imageTimeout: 60000, // Longer timeout for tiles
+          imageTimeout: 90000, // Longer timeout for tiles (90 seconds)
           proxy: undefined,
           ignoreElements: (element) => {
             // Ignore UI controls that are not part of the map, BUT include legend
@@ -3050,11 +3064,14 @@ const App = () => {
               
               // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE EXACT POSITIONING
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
+              const originalTiles = document.querySelectorAll('img.leaflet-tile');
+              
+              console.log(`[EXPORT] Found ${allTiles.length} tiles in clone, ${originalTiles.length} in original`);
+              
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
                 
                 // Find corresponding original tile to preserve its exact transform
-                const originalTiles = document.querySelectorAll('img.leaflet-tile');
                 let originalTile = null;
                 originalTiles.forEach(origTile => {
                   if (origTile.src === tile.src) {
@@ -3070,25 +3087,71 @@ const App = () => {
                   tile.style.transform = tileStyle.transform;
                   tile.style.width = tileStyle.width;
                   tile.style.height = tileStyle.height;
+                  
+                  // CRITICAL: Copy the actual image source - ensure it's loaded
+                  if (originalTile.complete && originalTile.naturalWidth > 0) {
+                    // Image is loaded - ensure it's visible
+                    tile.style.visibility = 'visible';
+                    tile.style.opacity = '1';
+                    tile.style.display = 'block';
+                    tile.style.zIndex = '100';
+                    tile.style.imageRendering = 'auto';
+                    tile.style.objectFit = 'fill';
+                    
+                    // CRITICAL: Ensure crossOrigin is set for CORS
+                    if (originalTile.crossOrigin) {
+                      tile.crossOrigin = originalTile.crossOrigin;
+                    } else {
+                      tile.crossOrigin = 'anonymous';
+                    }
+                  } else {
+                    // Image not loaded yet - wait for it
+                    tile.style.visibility = 'visible';
+                    tile.style.opacity = '0.5'; // Show as loading
+                    tile.style.display = 'block';
+                  }
                 } else {
                   tile.style.position = 'absolute';
                 }
                 
                 tile.style.imageRendering = 'auto';
                 
-                // Only show satellite tiles - hide OpenTopoMap tiles
-                if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
+                // CRITICAL: Show ALL satellite tiles - they are the basemap!
+                if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline') || tileSrc.includes('server.arcgisonline')) {
                   tile.style.visibility = 'visible';
                   tile.style.opacity = '1';
                   tile.style.display = 'block';
                   tile.style.zIndex = '100';
+                  tile.style.pointerEvents = 'none';
+                  
+                  // Force tile to be visible with !important
+                  tile.setAttribute('style', tile.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; display: block !important;');
+                  
+                  console.log(`[EXPORT] Making satellite tile visible: ${tileSrc.substring(0, 50)}...`);
                 } else if (tileSrc.includes('opentopomap')) {
                   // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
                   tile.style.display = 'none';
                   tile.style.visibility = 'hidden';
                   tile.style.opacity = '0';
+                } else {
+                  // Unknown tile type - make visible by default (might be satellite)
+                  tile.style.visibility = 'visible';
+                  tile.style.opacity = '1';
+                  tile.style.display = 'block';
+                  tile.style.zIndex = '100';
+                  console.log(`[EXPORT] Making unknown tile visible: ${tileSrc.substring(0, 50)}...`);
                 }
               });
+              
+              // CRITICAL: Ensure tile pane is visible
+              const tilePane = clonedMap.querySelector('.leaflet-tile-pane');
+              if (tilePane) {
+                tilePane.style.visibility = 'visible';
+                tilePane.style.display = 'block';
+                tilePane.style.opacity = '1';
+                tilePane.style.zIndex = '100';
+                console.log('[EXPORT] Tile pane made visible');
+              }
               
               // CRITICAL: Ensure Leaflet overlay pane is visible (contains contours)
               const overlayPane = clonedMap.querySelector('.leaflet-overlay-pane');
@@ -3641,11 +3704,14 @@ const App = () => {
               
               // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE EXACT POSITIONING
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
+              const originalTiles = document.querySelectorAll('img.leaflet-tile');
+              
+              console.log(`[EXPORT] Found ${allTiles.length} tiles in clone, ${originalTiles.length} in original`);
+              
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
                 
                 // Find corresponding original tile to preserve its exact transform
-                const originalTiles = document.querySelectorAll('img.leaflet-tile');
                 let originalTile = null;
                 originalTiles.forEach(origTile => {
                   if (origTile.src === tile.src) {
@@ -3661,25 +3727,71 @@ const App = () => {
                   tile.style.transform = tileStyle.transform;
                   tile.style.width = tileStyle.width;
                   tile.style.height = tileStyle.height;
+                  
+                  // CRITICAL: Copy the actual image source - ensure it's loaded
+                  if (originalTile.complete && originalTile.naturalWidth > 0) {
+                    // Image is loaded - ensure it's visible
+                    tile.style.visibility = 'visible';
+                    tile.style.opacity = '1';
+                    tile.style.display = 'block';
+                    tile.style.zIndex = '100';
+                    tile.style.imageRendering = 'auto';
+                    tile.style.objectFit = 'fill';
+                    
+                    // CRITICAL: Ensure crossOrigin is set for CORS
+                    if (originalTile.crossOrigin) {
+                      tile.crossOrigin = originalTile.crossOrigin;
+                    } else {
+                      tile.crossOrigin = 'anonymous';
+                    }
+                  } else {
+                    // Image not loaded yet - wait for it
+                    tile.style.visibility = 'visible';
+                    tile.style.opacity = '0.5'; // Show as loading
+                    tile.style.display = 'block';
+                  }
                 } else {
                   tile.style.position = 'absolute';
                 }
                 
                 tile.style.imageRendering = 'auto';
                 
-                // Only show satellite tiles - hide OpenTopoMap tiles
-                if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
+                // CRITICAL: Show ALL satellite tiles - they are the basemap!
+                if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline') || tileSrc.includes('server.arcgisonline')) {
                   tile.style.visibility = 'visible';
                   tile.style.opacity = '1';
                   tile.style.display = 'block';
                   tile.style.zIndex = '100';
+                  tile.style.pointerEvents = 'none';
+                  
+                  // Force tile to be visible with !important
+                  tile.setAttribute('style', tile.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; display: block !important;');
+                  
+                  console.log(`[EXPORT] Making satellite tile visible: ${tileSrc.substring(0, 50)}...`);
                 } else if (tileSrc.includes('opentopomap')) {
                   // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
                   tile.style.display = 'none';
                   tile.style.visibility = 'hidden';
                   tile.style.opacity = '0';
+                } else {
+                  // Unknown tile type - make visible by default (might be satellite)
+                  tile.style.visibility = 'visible';
+                  tile.style.opacity = '1';
+                  tile.style.display = 'block';
+                  tile.style.zIndex = '100';
+                  console.log(`[EXPORT] Making unknown tile visible: ${tileSrc.substring(0, 50)}...`);
                 }
               });
+              
+              // CRITICAL: Ensure tile pane is visible
+              const tilePane = clonedMap.querySelector('.leaflet-tile-pane');
+              if (tilePane) {
+                tilePane.style.visibility = 'visible';
+                tilePane.style.display = 'block';
+                tilePane.style.opacity = '1';
+                tilePane.style.zIndex = '100';
+                console.log('[EXPORT] Tile pane made visible');
+              }
               
               // CRITICAL: Ensure Leaflet overlay pane is visible (contains contours)
               const overlayPane = clonedMap.querySelector('.leaflet-overlay-pane');
