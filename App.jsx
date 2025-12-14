@@ -3216,6 +3216,17 @@ const App = () => {
         link.click();
         
         showToast('Map exported as PNG successfully', 'success');
+        
+        // CRITICAL: Re-enable map interactions after successful export
+        if (mapInstanceRef.current) {
+          const map = mapInstanceRef.current;
+          map.dragging.enable();
+          map.touchZoom.enable();
+          map.doubleClickZoom.enable();
+          map.scrollWheelZoom.enable();
+          map.boxZoom.enable();
+          map.keyboard.enable();
+        }
       } catch (exportError) {
         // CRITICAL: Re-enable map interactions on error
         if (mapInstanceRef.current) {
@@ -3746,7 +3757,28 @@ const App = () => {
         pdf.save(`permaculture-map-${Date.now()}.pdf`);
         
         showToast('Map exported as PDF successfully', 'success');
+        
+        // CRITICAL: Re-enable map interactions after successful export
+        if (mapInstanceRef.current) {
+          const map = mapInstanceRef.current;
+          map.dragging.enable();
+          map.touchZoom.enable();
+          map.doubleClickZoom.enable();
+          map.scrollWheelZoom.enable();
+          map.boxZoom.enable();
+          map.keyboard.enable();
+        }
       } catch (exportError) {
+        // CRITICAL: Re-enable map interactions on error
+        if (mapInstanceRef.current) {
+          const map = mapInstanceRef.current;
+          map.dragging.enable();
+          map.touchZoom.enable();
+          map.doubleClickZoom.enable();
+          map.scrollWheelZoom.enable();
+          map.boxZoom.enable();
+          map.keyboard.enable();
+        }
         // Restore UI controls on error
         controls.forEach((el, i) => {
           el.style.display = originalDisplay[i];
