@@ -42,8 +42,9 @@ def dem_tile(bbox: str):
 @app.get("/contours")
 def contour_endpoint(bbox: str, interval: float = 5, bold_interval: int = None):
     """
-    Generate contours - ULTRA-FAST method using OpenElevation API
-    Optimized for speed: 10-20 seconds instead of 2-3 minutes
+    Generate accurate contours using SRTM 30m DEM tiles
+    Uses GDAL for professional-quality contour extraction
+    Processing time: 30-90 seconds (depends on area size)
     
     Args:
         bbox: Bounding box "minx,miny,maxx,maxy"
