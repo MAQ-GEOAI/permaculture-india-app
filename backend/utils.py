@@ -135,16 +135,18 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     
     for source in sources:
         try:
+            # Skip sources that require auth (for now)
+            if source.get('requires_auth', False):
+                continue
+            
             # Try primary URL first
             url = source['url']
             source_type = source.get('type', 'tif')
+            description = source.get('description', 'Unknown')
             
-            r = requests.get(url, timeout=20, headers={'User-Agent': 'Permaculture-App/1.0'})
+            print(f"[UTILS] Trying {description}: {url}")
             
-            # If primary URL fails and fallback exists, try fallback (for OpenTopography North/South)
-            if r.status_code != 200 and 'fallback_url' in source:
-                url = source['fallback_url']
-                r = requests.get(url, timeout=20, headers={'User-Agent': 'Permaculture-App/1.0'})
+            r = requests.get(url, timeout=15, headers={'User-Agent': 'Permaculture-App/1.0'}, allow_redirects=True)
             
             if r.status_code == 200 and len(r.content) > 1000:
                 with open(path, "wb") as f:
@@ -160,6 +162,7 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
                             
                             if len(valid_data) == 0:
                                 # No valid data
+                                print(f"[UTILS] {description}: No valid data")
                                 if os.path.exists(path):
                                     os.remove(path)
                                 continue
@@ -171,17 +174,23 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
                             # Require at least 1m variation and 0.5m standard deviation
                             if data_std < 0.5 or data_range < 1.0:
                                 # Uniform/invalid data - reject
+                                print(f"[UTILS] {description}: Uniform data (std={data_std:.2f}, range={data_range:.2f})")
                                 if os.path.exists(path):
                                     os.remove(path)
                                 continue
                             
                             # Valid DEM with real terrain variation
+                            print(f"[UTILS] ✅ Successfully downloaded {description}: {len(valid_data)} points, range {np.min(valid_data):.1f}m - {np.max(valid_data):.1f}m")
                             return path
                 except Exception as e:
+                    print(f"[UTILS] {description}: Invalid file format: {e}")
                     if os.path.exists(path):
                         os.remove(path)
                     continue
+            else:
+                print(f"[UTILS] {description}: HTTP {r.status_code}, content length: {len(r.content)}")
         except Exception as e:
+            print(f"[UTILS] {source.get('description', 'Unknown')}: Error - {e}")
             continue
     
     # If all sources fail, try OpenElevation API as last resort
