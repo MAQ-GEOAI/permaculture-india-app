@@ -2794,22 +2794,43 @@ const App = () => {
         mapContainer.style.overflow = 'visible';
         // DO NOT set transform on container - preserve Leaflet's coordinate system
         
-        // Force map to redraw and ensure tiles are loaded
+        // CRITICAL: Lock map position completely before export to prevent any shifting
         if (mapInstanceRef.current) {
-          // CRITICAL: Ensure map is at correct zoom/position before export
-          const currentCenter = mapInstanceRef.current.getCenter();
-          const currentZoom = mapInstanceRef.current.getZoom();
-          mapInstanceRef.current.invalidateSize();
-          // Wait for map to update
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const map = mapInstanceRef.current;
           
-          // Ensure map hasn't shifted
-          const newCenter = mapInstanceRef.current.getCenter();
-          if (Math.abs(newCenter.lat - currentCenter.lat) > 0.0001 || 
-              Math.abs(newCenter.lng - currentCenter.lng) > 0.0001) {
-            mapInstanceRef.current.setView(currentCenter, currentZoom);
-            await new Promise(resolve => setTimeout(resolve, 500));
+          // Disable all map interactions to prevent shifting
+          map.dragging.disable();
+          map.touchZoom.disable();
+          map.doubleClickZoom.disable();
+          map.scrollWheelZoom.disable();
+          map.boxZoom.disable();
+          map.keyboard.disable();
+          
+          // Lock the exact view
+          const currentCenter = map.getCenter();
+          const currentZoom = map.getZoom();
+          const currentBounds = map.getBounds();
+          
+          // Force map to exact position
+          map.setView(currentCenter, currentZoom, { animate: false, reset: false });
+          map.invalidateSize();
+          
+          // Wait for map to stabilize completely
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Verify position hasn't changed
+          const newCenter = map.getCenter();
+          const newZoom = map.getZoom();
+          if (Math.abs(newCenter.lat - currentCenter.lat) > 0.00001 || 
+              Math.abs(newCenter.lng - currentCenter.lng) > 0.00001 ||
+              newZoom !== currentZoom) {
+            // Force back to exact position
+            map.setView(currentCenter, currentZoom, { animate: false, reset: false });
+            await new Promise(resolve => setTimeout(resolve, 1000));
           }
+          
+          // Final wait for all rendering to complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
           
           // Check if tiles are loaded
           const tiles = mapContainer.querySelectorAll('img.leaflet-tile');
@@ -2837,11 +2858,19 @@ const App = () => {
           imageTimeout: 60000, // Longer timeout for tiles
           proxy: undefined,
           ignoreElements: (element) => {
-            // Ignore UI controls that are not part of the map
-            return element.classList && (
-              element.classList.contains('no-export') ||
-              (element.style && element.style.display === 'none')
-            );
+            // Ignore UI controls that are not part of the map, BUT include legend
+            if (element.classList && element.classList.contains('no-export')) {
+              return true;
+            }
+            // Include legend in export if it's visible
+            if (element.classList && element.classList.contains('absolute') && showLegend) {
+              // Check if it's the legend popup
+              const legendContent = element.querySelector('.absolute.top-full');
+              if (legendContent) {
+                return false; // Include legend
+              }
+            }
+            return element.style && element.style.display === 'none';
           },
           onclone: async (clonedDoc) => {
             // Wait for images to load in clone first
@@ -3135,12 +3164,25 @@ const App = () => {
                 shadow.style.opacity = '0.5';
               });
             }
-            // Hide all controls in clone
+            // Hide all controls in clone EXCEPT legend if visible
             const clonedControls = clonedDoc.querySelectorAll('.absolute');
             clonedControls.forEach((el) => {
               if (el.id !== 'leaflet-map-container' && 
                   !el.closest('#leaflet-map-container')) {
-                el.style.display = 'none';
+                // Keep legend visible if showLegend is true
+                const isLegend = el.querySelector && (
+                  el.querySelector('.absolute.top-full') || 
+                  (el.textContent && el.textContent.includes('Map Legend'))
+                );
+                if (!isLegend || !showLegend) {
+                  el.style.display = 'none';
+                } else {
+                  // Ensure legend is visible and properly positioned
+                  el.style.visibility = 'visible';
+                  el.style.opacity = '1';
+                  el.style.zIndex = '10000';
+                  el.style.display = 'block';
+                }
               }
             });
           }
@@ -3175,6 +3217,16 @@ const App = () => {
         
         showToast('Map exported as PNG successfully', 'success');
       } catch (exportError) {
+        // CRITICAL: Re-enable map interactions on error
+        if (mapInstanceRef.current) {
+          const map = mapInstanceRef.current;
+          map.dragging.enable();
+          map.touchZoom.enable();
+          map.doubleClickZoom.enable();
+          map.scrollWheelZoom.enable();
+          map.boxZoom.enable();
+          map.keyboard.enable();
+        }
         // Restore UI controls on error
         controls.forEach((el, i) => {
           el.style.display = originalDisplay[i];
@@ -3182,6 +3234,16 @@ const App = () => {
         throw exportError;
       }
     } catch (error) {
+      // CRITICAL: Re-enable map interactions on error
+      if (mapInstanceRef.current) {
+        const map = mapInstanceRef.current;
+        map.dragging.enable();
+        map.touchZoom.enable();
+        map.doubleClickZoom.enable();
+        map.scrollWheelZoom.enable();
+        map.boxZoom.enable();
+        map.keyboard.enable();
+      }
       console.error('Export error:', error);
       showToast('Export failed: ' + (error.message || 'Unknown error'), 'error');
     }
@@ -3259,11 +3321,39 @@ const App = () => {
         mapContainer.style.height = mapHeight + 'px';
         mapContainer.style.overflow = 'visible';
         
-        // Force map to redraw and ensure tiles are loaded
+        // CRITICAL: Lock map position completely before export to prevent any shifting
         if (mapInstanceRef.current) {
-          mapInstanceRef.current.invalidateSize();
-          // Wait for map to update
-          await new Promise(resolve => setTimeout(resolve, 1000));
+          const map = mapInstanceRef.current;
+          
+          // Disable all map interactions to prevent shifting
+          map.dragging.disable();
+          map.touchZoom.disable();
+          map.doubleClickZoom.disable();
+          map.scrollWheelZoom.disable();
+          map.boxZoom.disable();
+          map.keyboard.disable();
+          
+          // Lock the exact view
+          const currentCenter = map.getCenter();
+          const currentZoom = map.getZoom();
+          
+          // Force map to exact position
+          map.setView(currentCenter, currentZoom, { animate: false, reset: false });
+          map.invalidateSize();
+          
+          // Wait for map to stabilize completely
+          await new Promise(resolve => setTimeout(resolve, 1500));
+          
+          // Verify position hasn't changed
+          const newCenter = map.getCenter();
+          const newZoom = map.getZoom();
+          if (Math.abs(newCenter.lat - currentCenter.lat) > 0.00001 || 
+              Math.abs(newCenter.lng - currentCenter.lng) > 0.00001 ||
+              newZoom !== currentZoom) {
+            // Force back to exact position
+            map.setView(currentCenter, currentZoom, { animate: false, reset: false });
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          }
           
           // Check if tiles are loaded
           const tiles = mapContainer.querySelectorAll('img.leaflet-tile');
@@ -3275,6 +3365,9 @@ const App = () => {
             showToast('Waiting for map tiles to load...', 'info');
             await new Promise(resolve => setTimeout(resolve, 2000));
           }
+          
+          // Final wait for all rendering to complete
+          await new Promise(resolve => setTimeout(resolve, 1000));
         }
         
         // Capture the map with better options for Leaflet
@@ -3581,12 +3674,25 @@ const App = () => {
                 shadow.style.opacity = '0.5';
               });
             }
-            // Hide all controls in clone
+            // Hide all controls in clone EXCEPT legend if visible
             const clonedControls = clonedDoc.querySelectorAll('.absolute');
             clonedControls.forEach((el) => {
               if (el.id !== 'leaflet-map-container' && 
                   !el.closest('#leaflet-map-container')) {
-                el.style.display = 'none';
+                // Keep legend visible if showLegend is true
+                const isLegend = el.querySelector && (
+                  el.querySelector('.absolute.top-full') || 
+                  (el.textContent && el.textContent.includes('Map Legend'))
+                );
+                if (!isLegend || !showLegend) {
+                  el.style.display = 'none';
+                } else {
+                  // Ensure legend is visible and properly positioned
+                  el.style.visibility = 'visible';
+                  el.style.opacity = '1';
+                  el.style.zIndex = '10000';
+                  el.style.display = 'block';
+                }
               }
             });
           }

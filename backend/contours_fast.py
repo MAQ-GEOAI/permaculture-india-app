@@ -374,6 +374,34 @@ def connect_segments(segments, minx, miny, maxx, maxy):
                 filtered.append(p)
         
         if len(filtered) >= 3:
+            # SMOOTH the contour line using spline interpolation for professional appearance
+            try:
+                from scipy.interpolate import splprep, splev
+                import numpy as np
+                
+                # Convert to numpy array
+                points = np.array(filtered)
+                if len(points) >= 4:  # Need at least 4 points for spline
+                    # Fit spline
+                    tck, u = splprep([points[:, 0], points[:, 1]], s=0, k=min(3, len(points)-1))
+                    # Generate smooth curve with more points
+                    u_new = np.linspace(0, 1, len(points) * 2)  # Double the points for smoothness
+                    smooth_points = splev(u_new, tck)
+                    # Convert back to list
+                    filtered = [[float(smooth_points[0][i]), float(smooth_points[1][i])] for i in range(len(smooth_points[0]))]
+                    log(f"Smoothed contour line from {len(points)} to {len(filtered)} points")
+            except (ImportError, Exception) as e:
+                # Fallback: simple smoothing by averaging adjacent points
+                if len(filtered) > 2:
+                    smoothed = [filtered[0]]  # Keep first point
+                    for i in range(1, len(filtered) - 1):
+                        # Average with neighbors for smoothness
+                        avg_x = (filtered[i-1][0] + filtered[i][0] + filtered[i+1][0]) / 3.0
+                        avg_y = (filtered[i-1][1] + filtered[i][1] + filtered[i+1][1]) / 3.0
+                        smoothed.append([avg_x, avg_y])
+                    smoothed.append(filtered[-1])  # Keep last point
+                    filtered = smoothed
+            
             lines.append(filtered)
     
     return lines
