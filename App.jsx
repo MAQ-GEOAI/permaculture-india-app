@@ -2858,45 +2858,44 @@ const App = () => {
               clonedMap.style.height = mapHeight + 'px';
               clonedMap.style.margin = '0';
               clonedMap.style.padding = '0';
-              clonedMap.style.transform = 'none';
+              // DO NOT remove transform - may be needed for proper rendering
+              // clonedMap.style.transform = 'none';
               clonedMap.style.zIndex = '1';
               clonedMap.style.backgroundColor = '#ffffff';
               clonedMap.style.overflow = 'visible';
               
-              // Fix Leaflet map pane positioning
+              // Fix Leaflet map pane positioning - PRESERVE LEAFLET COORDINATE SYSTEM
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
               if (leafletPane) {
-                leafletPane.style.position = 'relative';
-                leafletPane.style.top = '0';
-                leafletPane.style.left = '0';
-                leafletPane.style.width = '100%';
-                leafletPane.style.height = '100%';
-                leafletPane.style.zIndex = '1';
+                // DO NOT reset position - preserve Leaflet's coordinate system
                 leafletPane.style.visibility = 'visible';
                 leafletPane.style.display = 'block';
+                leafletPane.style.opacity = '1';
+                leafletPane.style.zIndex = '1';
               }
               
-              // Ensure all Leaflet panes are visible
+              // Ensure all Leaflet panes are visible - PRESERVE THEIR POSITIONING
               const allPanes = clonedMap.querySelectorAll('.leaflet-pane');
               allPanes.forEach((pane) => {
                 pane.style.visibility = 'visible';
                 pane.style.display = 'block';
                 pane.style.opacity = '1';
+                // DO NOT modify position, top, left, or transform - Leaflet manages these!
               });
               
-              // CRITICAL: Ensure satellite basemap tiles are visible and prioritized
+              // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE LEAFLET TRANSFORMS
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
+                // DO NOT remove transform - Leaflet uses it for positioning!
                 tile.style.position = 'absolute';
-                tile.style.transform = 'none';
                 tile.style.imageRendering = 'auto';
                 
                 // Only show satellite tiles - hide OpenTopoMap tiles
                 if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
-                tile.style.visibility = 'visible';
-                tile.style.opacity = '1';
-                tile.style.display = 'block';
+                  tile.style.visibility = 'visible';
+                  tile.style.opacity = '1';
+                  tile.style.display = 'block';
                   tile.style.zIndex = '100';
                 } else if (tileSrc.includes('opentopomap')) {
                   // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
@@ -2916,12 +2915,11 @@ const App = () => {
                 overlayPane.style.pointerEvents = 'none';
               }
               
-              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - ensure they're above basemap and visible
+              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - PRESERVE LEAFLET TRANSFORMS for alignment
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
               svgOverlays.forEach((svg) => {
+                // DO NOT remove transform or set top/left to 0 - Leaflet uses transforms for positioning!
                 svg.style.position = 'absolute';
-                svg.style.top = '0';
-                svg.style.left = '0';
                 svg.style.visibility = 'visible';
                 svg.style.opacity = '1';
                 svg.style.display = 'block';
@@ -3195,45 +3193,44 @@ const App = () => {
               clonedMap.style.height = mapHeight + 'px';
               clonedMap.style.margin = '0';
               clonedMap.style.padding = '0';
-              clonedMap.style.transform = 'none';
+              // DO NOT remove transform - may be needed for proper rendering
+              // clonedMap.style.transform = 'none';
               clonedMap.style.zIndex = '1';
               clonedMap.style.backgroundColor = '#ffffff';
               clonedMap.style.overflow = 'visible';
               
-              // Fix Leaflet map pane positioning
+              // Fix Leaflet map pane positioning - PRESERVE LEAFLET COORDINATE SYSTEM
               const leafletPane = clonedMap.querySelector('.leaflet-pane');
               if (leafletPane) {
-                leafletPane.style.position = 'relative';
-                leafletPane.style.top = '0';
-                leafletPane.style.left = '0';
-                leafletPane.style.width = '100%';
-                leafletPane.style.height = '100%';
-                leafletPane.style.zIndex = '1';
+                // DO NOT reset position - preserve Leaflet's coordinate system
                 leafletPane.style.visibility = 'visible';
                 leafletPane.style.display = 'block';
+                leafletPane.style.opacity = '1';
+                leafletPane.style.zIndex = '1';
               }
               
-              // Ensure all Leaflet panes are visible
+              // Ensure all Leaflet panes are visible - PRESERVE THEIR POSITIONING
               const allPanes = clonedMap.querySelectorAll('.leaflet-pane');
               allPanes.forEach((pane) => {
                 pane.style.visibility = 'visible';
                 pane.style.display = 'block';
                 pane.style.opacity = '1';
+                // DO NOT modify position, top, left, or transform - Leaflet manages these!
               });
               
-              // CRITICAL: Ensure satellite basemap tiles are visible and prioritized
+              // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE LEAFLET TRANSFORMS
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
+                // DO NOT remove transform - Leaflet uses it for positioning!
                 tile.style.position = 'absolute';
-                tile.style.transform = 'none';
                 tile.style.imageRendering = 'auto';
                 
                 // Only show satellite tiles - hide OpenTopoMap tiles
                 if (tileSrc.includes('World_Imagery') || tileSrc.includes('arcgisonline')) {
-                tile.style.visibility = 'visible';
-                tile.style.opacity = '1';
-                tile.style.display = 'block';
+                  tile.style.visibility = 'visible';
+                  tile.style.opacity = '1';
+                  tile.style.display = 'block';
                   tile.style.zIndex = '100';
                 } else if (tileSrc.includes('opentopomap')) {
                   // Hide OpenTopoMap tiles - we only want satellite + contour GeoJSON
@@ -3253,12 +3250,11 @@ const App = () => {
                 overlayPane.style.pointerEvents = 'none';
               }
               
-              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - ensure they're above basemap and visible
+              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - PRESERVE LEAFLET TRANSFORMS for alignment
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
               svgOverlays.forEach((svg) => {
+                // DO NOT remove transform or set top/left to 0 - Leaflet uses transforms for positioning!
                 svg.style.position = 'absolute';
-                svg.style.top = '0';
-                svg.style.left = '0';
                 svg.style.visibility = 'visible';
                 svg.style.opacity = '1';
                 svg.style.display = 'block';
