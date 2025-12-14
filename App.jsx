@@ -3042,52 +3042,115 @@ const App = () => {
                 // CRITICAL: Ensure all path elements inside SVG are visible (contours)
                 const paths = svg.querySelectorAll('path');
                 paths.forEach((path) => {
+                  // Get original path to preserve its actual color
+                  const originalPaths = document.querySelectorAll('svg.leaflet-zoom-animated path, .leaflet-overlay-pane svg path');
+                  let originalPath = null;
+                  const pathD = path.getAttribute('d');
+                  if (pathD) {
+                    originalPath = Array.from(originalPaths).find(orig => orig.getAttribute('d') === pathD);
+                  }
+                  
                   path.style.visibility = 'visible';
                   path.style.opacity = '1';
                   path.style.display = 'block';
                   path.style.fill = 'none';
                   
-                  // Get or set stroke attributes
-                  let strokeWidth = path.getAttribute('stroke-width');
-                  let stroke = path.getAttribute('stroke');
+                  // Get stroke attributes from original or use defaults
+                  let strokeWidth = originalPath ? originalPath.getAttribute('stroke-width') : path.getAttribute('stroke-width');
+                  let stroke = originalPath ? originalPath.getAttribute('stroke') : path.getAttribute('stroke');
                   
-                  if (!strokeWidth || strokeWidth === '0') {
-                    strokeWidth = '3'; // Default thicker for export
-                  }
-                  if (!stroke || stroke === 'none') {
-                    stroke = '#3b82f6'; // Default blue
+                  // If no stroke width or too thin, make it thicker for export visibility
+                  if (!strokeWidth || strokeWidth === '0' || parseFloat(strokeWidth) < 2) {
+                    strokeWidth = '4'; // Thicker for export - contours must be visible
+                  } else {
+                    // Increase existing stroke width by 1px for better visibility in export
+                    strokeWidth = String(Math.max(4, parseFloat(strokeWidth) + 1));
                   }
                   
-                  // Set both style and attribute
-                  path.style.strokeWidth = strokeWidth;
+                  // Get actual color from original or use visible default
+                  if (!stroke || stroke === 'none' || stroke === 'transparent') {
+                    // Try to get computed style from original
+                    if (originalPath) {
+                      const computedStyle = window.getComputedStyle(originalPath);
+                      stroke = computedStyle.stroke || computedStyle.color || '#22c55e'; // Green default for contours
+                    } else {
+                      stroke = '#22c55e'; // Green default for contours
+                    }
+                  }
+                  
+                  // CRITICAL: Set both style and attribute with !important for export
+                  path.style.strokeWidth = strokeWidth + 'px';
                   path.style.stroke = stroke;
                   path.style.strokeOpacity = '1';
+                  path.style.opacity = '1';
                   path.setAttribute('stroke-width', strokeWidth);
                   path.setAttribute('stroke', stroke);
                   path.setAttribute('stroke-opacity', '1');
                   path.setAttribute('fill', 'none');
-                  path.setAttribute('style', path.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; stroke-width: ' + strokeWidth + ' !important; stroke: ' + stroke + ' !important;');
+                  
+                  // Force visibility with !important
+                  const existingStyle = path.getAttribute('style') || '';
+                  path.setAttribute('style', existingStyle + 
+                    '; visibility: visible !important; ' +
+                    'opacity: 1 !important; ' +
+                    'display: block !important; ' +
+                    'stroke-width: ' + strokeWidth + 'px !important; ' +
+                    'stroke: ' + stroke + ' !important; ' +
+                    'stroke-opacity: 1 !important; ' +
+                    'fill: none !important;');
                 });
               });
               
-              // Also check for ALL paths in overlay pane
+              // Also check for ALL paths in overlay pane - ensure contours are visible
               const allPaths = clonedMap.querySelectorAll('.leaflet-overlay-pane path, svg path');
+              const originalAllPaths = document.querySelectorAll('.leaflet-overlay-pane path, svg path');
+              
               allPaths.forEach((path) => {
+                // Find original path to preserve color
+                const pathD = path.getAttribute('d');
+                let originalPath = null;
+                if (pathD) {
+                  originalPath = Array.from(originalAllPaths).find(orig => orig.getAttribute('d') === pathD);
+                }
+                
                 path.style.visibility = 'visible';
                 path.style.opacity = '1';
                 path.style.display = 'block';
                 path.style.fill = 'none';
                 
-                if (!path.getAttribute('stroke') || path.getAttribute('stroke') === 'none') {
-                  path.setAttribute('stroke', '#3b82f6');
-                  path.style.stroke = '#3b82f6';
+                // Get stroke from original or use default
+                let stroke = originalPath ? originalPath.getAttribute('stroke') : path.getAttribute('stroke');
+                if (!stroke || stroke === 'none' || stroke === 'transparent') {
+                  if (originalPath) {
+                    const computedStyle = window.getComputedStyle(originalPath);
+                    stroke = computedStyle.stroke || computedStyle.color || '#22c55e';
+                  } else {
+                    stroke = '#22c55e'; // Green for contours
+                  }
                 }
-                if (!path.getAttribute('stroke-width') || path.getAttribute('stroke-width') === '0') {
-                  path.setAttribute('stroke-width', '3');
-                  path.style.strokeWidth = '3';
+                
+                // Ensure stroke width is thick enough for export
+                let strokeWidth = originalPath ? originalPath.getAttribute('stroke-width') : path.getAttribute('stroke-width');
+                if (!strokeWidth || strokeWidth === '0' || parseFloat(strokeWidth) < 3) {
+                  strokeWidth = '4'; // Minimum 4px for export visibility
+                } else {
+                  strokeWidth = String(Math.max(4, parseFloat(strokeWidth) + 1));
                 }
+                
+                path.setAttribute('stroke', stroke);
+                path.style.stroke = stroke;
+                path.setAttribute('stroke-width', strokeWidth);
+                path.style.strokeWidth = strokeWidth + 'px';
                 path.setAttribute('stroke-opacity', '1');
                 path.style.strokeOpacity = '1';
+                
+                // Force with !important
+                const existingStyle = path.getAttribute('style') || '';
+                path.setAttribute('style', existingStyle + 
+                  '; visibility: visible !important; ' +
+                  'opacity: 1 !important; ' +
+                  'stroke-width: ' + strokeWidth + 'px !important; ' +
+                  'stroke: ' + stroke + ' !important;');
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
@@ -3563,52 +3626,115 @@ const App = () => {
                 // CRITICAL: Ensure all path elements inside SVG are visible (contours)
                 const paths = svg.querySelectorAll('path');
                 paths.forEach((path) => {
+                  // Get original path to preserve its actual color
+                  const originalPaths = document.querySelectorAll('svg.leaflet-zoom-animated path, .leaflet-overlay-pane svg path');
+                  let originalPath = null;
+                  const pathD = path.getAttribute('d');
+                  if (pathD) {
+                    originalPath = Array.from(originalPaths).find(orig => orig.getAttribute('d') === pathD);
+                  }
+                  
                   path.style.visibility = 'visible';
                   path.style.opacity = '1';
                   path.style.display = 'block';
                   path.style.fill = 'none';
                   
-                  // Get or set stroke attributes
-                  let strokeWidth = path.getAttribute('stroke-width');
-                  let stroke = path.getAttribute('stroke');
+                  // Get stroke attributes from original or use defaults
+                  let strokeWidth = originalPath ? originalPath.getAttribute('stroke-width') : path.getAttribute('stroke-width');
+                  let stroke = originalPath ? originalPath.getAttribute('stroke') : path.getAttribute('stroke');
                   
-                  if (!strokeWidth || strokeWidth === '0') {
-                    strokeWidth = '3'; // Default thicker for export
-                  }
-                  if (!stroke || stroke === 'none') {
-                    stroke = '#3b82f6'; // Default blue
+                  // If no stroke width or too thin, make it thicker for export visibility
+                  if (!strokeWidth || strokeWidth === '0' || parseFloat(strokeWidth) < 2) {
+                    strokeWidth = '4'; // Thicker for export - contours must be visible
+                  } else {
+                    // Increase existing stroke width by 1px for better visibility in export
+                    strokeWidth = String(Math.max(4, parseFloat(strokeWidth) + 1));
                   }
                   
-                  // Set both style and attribute
-                  path.style.strokeWidth = strokeWidth;
+                  // Get actual color from original or use visible default
+                  if (!stroke || stroke === 'none' || stroke === 'transparent') {
+                    // Try to get computed style from original
+                    if (originalPath) {
+                      const computedStyle = window.getComputedStyle(originalPath);
+                      stroke = computedStyle.stroke || computedStyle.color || '#22c55e'; // Green default for contours
+                    } else {
+                      stroke = '#22c55e'; // Green default for contours
+                    }
+                  }
+                  
+                  // CRITICAL: Set both style and attribute with !important for export
+                  path.style.strokeWidth = strokeWidth + 'px';
                   path.style.stroke = stroke;
                   path.style.strokeOpacity = '1';
+                  path.style.opacity = '1';
                   path.setAttribute('stroke-width', strokeWidth);
                   path.setAttribute('stroke', stroke);
                   path.setAttribute('stroke-opacity', '1');
                   path.setAttribute('fill', 'none');
-                  path.setAttribute('style', path.getAttribute('style') + '; visibility: visible !important; opacity: 1 !important; stroke-width: ' + strokeWidth + ' !important; stroke: ' + stroke + ' !important;');
+                  
+                  // Force visibility with !important
+                  const existingStyle = path.getAttribute('style') || '';
+                  path.setAttribute('style', existingStyle + 
+                    '; visibility: visible !important; ' +
+                    'opacity: 1 !important; ' +
+                    'display: block !important; ' +
+                    'stroke-width: ' + strokeWidth + 'px !important; ' +
+                    'stroke: ' + stroke + ' !important; ' +
+                    'stroke-opacity: 1 !important; ' +
+                    'fill: none !important;');
                 });
               });
               
-              // Also check for ALL paths in overlay pane
+              // Also check for ALL paths in overlay pane - ensure contours are visible
               const allPaths = clonedMap.querySelectorAll('.leaflet-overlay-pane path, svg path');
+              const originalAllPaths = document.querySelectorAll('.leaflet-overlay-pane path, svg path');
+              
               allPaths.forEach((path) => {
+                // Find original path to preserve color
+                const pathD = path.getAttribute('d');
+                let originalPath = null;
+                if (pathD) {
+                  originalPath = Array.from(originalAllPaths).find(orig => orig.getAttribute('d') === pathD);
+                }
+                
                 path.style.visibility = 'visible';
                 path.style.opacity = '1';
                 path.style.display = 'block';
                 path.style.fill = 'none';
                 
-                if (!path.getAttribute('stroke') || path.getAttribute('stroke') === 'none') {
-                  path.setAttribute('stroke', '#3b82f6');
-                  path.style.stroke = '#3b82f6';
+                // Get stroke from original or use default
+                let stroke = originalPath ? originalPath.getAttribute('stroke') : path.getAttribute('stroke');
+                if (!stroke || stroke === 'none' || stroke === 'transparent') {
+                  if (originalPath) {
+                    const computedStyle = window.getComputedStyle(originalPath);
+                    stroke = computedStyle.stroke || computedStyle.color || '#22c55e';
+                  } else {
+                    stroke = '#22c55e'; // Green for contours
+                  }
                 }
-                if (!path.getAttribute('stroke-width') || path.getAttribute('stroke-width') === '0') {
-                  path.setAttribute('stroke-width', '3');
-                  path.style.strokeWidth = '3';
+                
+                // Ensure stroke width is thick enough for export
+                let strokeWidth = originalPath ? originalPath.getAttribute('stroke-width') : path.getAttribute('stroke-width');
+                if (!strokeWidth || strokeWidth === '0' || parseFloat(strokeWidth) < 3) {
+                  strokeWidth = '4'; // Minimum 4px for export visibility
+                } else {
+                  strokeWidth = String(Math.max(4, parseFloat(strokeWidth) + 1));
                 }
+                
+                path.setAttribute('stroke', stroke);
+                path.style.stroke = stroke;
+                path.setAttribute('stroke-width', strokeWidth);
+                path.style.strokeWidth = strokeWidth + 'px';
                 path.setAttribute('stroke-opacity', '1');
                 path.style.strokeOpacity = '1';
+                
+                // Force with !important
+                const existingStyle = path.getAttribute('style') || '';
+                path.setAttribute('style', existingStyle + 
+                  '; visibility: visible !important; ' +
+                  'opacity: 1 !important; ' +
+                  'stroke-width: ' + strokeWidth + 'px !important; ' +
+                  'stroke: ' + stroke + ' !important;');
               });
               
               // CRITICAL: Ensure contour labels are visible and above everything
