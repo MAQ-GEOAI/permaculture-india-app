@@ -1311,14 +1311,14 @@ const App = () => {
       }
       
       // Fetch all layers in parallel with timeouts - with progress tracking
-      showToast('Fetching terrain data from backend (should take 10-30 seconds)...', 'info');
+      showToast('Fetching terrain data from backend (SRTM DEM processing may take 30-90 seconds)...', 'info');
       log('Starting parallel backend requests...');
       log(`Backend URL: ${BACKEND_URL}`);
       log(`Contour URL: ${contourUrl}`);
       
-      // Fast method - should complete in 10-30 seconds
+      // SRTM DEM method - may take 30-90 seconds (downloading tiles, GDAL processing)
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetchWithTimeout(contourUrl, 60000).catch(e => { // 1 minute for fast contours
+        fetchWithTimeout(contourUrl, 120000).catch(e => { // 2 minutes for SRTM DEM contours
           logWarn('Contours request failed:', e);
           throw e;
         }),
