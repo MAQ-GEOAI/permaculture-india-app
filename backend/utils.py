@@ -78,46 +78,53 @@ def download_single_dem_tile(tile_lat, tile_lon, is_india=False):
     if os.path.exists(path):
         return path
 
-    # Priority sources for India - SRTM 30m from multiple sources including Bhuvan
-    # OpenTopography Portal provides SRTM 1 Arc-Second (30m) Global DEM - the gold standard
+    # Priority sources for India - SRTM 30m from multiple sources
+    # Using correct SRTM tile naming: N/S + lat + E/W + lon (e.g., N26E088)
+    srtm_tile = get_srtm_tile_name(tile_lat, tile_lon)
+    
     if is_india:
         sources = [
-            # Source 1: AWS SRTM Skadi (30m, SRTM-based, most reliable and fast)
+            # Source 1: Terrain Tiles (SRTM 30m, reliable)
             {
-                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
-                'type': 'tif',
-                'description': 'SRTM 30m via AWS Skadi'
+                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/terrarium/{tile_lat}/{tile_lon}.png",
+                'type': 'png',
+                'description': 'Terrain Tiles SRTM 30m'
             },
-            # Source 2: Alternative AWS endpoint (SRTM 30m)
+            # Source 2: AWS SRTM Skadi (correct format: N/S + lat + E/W + lon)
             {
-                'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
+                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{srtm_tile}.tif",
+                'type': 'tif',
+                'description': 'SRTM 30m via AWS Skadi (correct naming)'
+            },
+            # Source 3: Alternative AWS endpoint
+            {
+                'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{srtm_tile}.tif",
                 'type': 'tif',
                 'description': 'SRTM 30m via AWS (alt)'
             },
-            # Source 3: OpenTopoMap DEM (SRTM-based, good quality)
+            # Source 4: Mapbox Terrain (SRTM-based)
+            {
+                'url': f"https://api.mapbox.com/v4/mapbox.terrain-rgb/{tile_lon}/{tile_lat}/10.pngraw?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXV4NTYyZ2gycXA4N2pmbDZmangifQ.-g_vE53SD2WrJ6tFX7QHmA",
+                'type': 'png',
+                'description': 'Mapbox Terrain RGB (SRTM-based)',
+                'requires_processing': True  # Needs conversion from RGB to elevation
+            },
+            # Source 5: OpenTopoMap DEM (SRTM-based)
             {
                 'url': f"https://opentopomap.org/dem/{tile_lat}_{tile_lon}.tif",
                 'type': 'tif',
                 'description': 'OpenTopoMap DEM (SRTM-based)'
-            },
-            # Source 4: Bhuvan CartoDEM (30m, India-specific, high quality)
-            # Note: Bhuvan API may require authentication, but trying public endpoints
-            {
-                'url': f"https://bhuvan-app3.nrsc.gov.in/data/download/index.php",
-                'type': 'tif',
-                'description': 'Bhuvan CartoDEM (India-specific)',
-                'requires_auth': True  # May need API key
             },
         ]
     else:
         # Global sources
         sources = [
             {
-                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{tile_lat}_{tile_lon}.tif",
+                'url': f"https://s3.amazonaws.com/elevation-tiles-prod/skadi/{srtm_tile}.tif",
                 'type': 'tif'
             },
             {
-                'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{tile_lat}_{tile_lon}.tif",
+                'url': f"https://elevation-tiles-prod.s3.amazonaws.com/skadi/{srtm_tile}.tif",
                 'type': 'tif'
             },
             {
