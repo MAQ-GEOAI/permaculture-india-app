@@ -80,16 +80,16 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
     """ULTRA-FAST contour generation - optimized for business delivery - completes in <50s"""
     minx, miny, maxx, maxy = map(float, bbox.split(","))
     
-    # Calculate grid size (optimized for speed and accuracy)
+    # Calculate grid size (optimized for speed - business delivery)
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
     
-    # Use larger grid for better accuracy while staying fast
+    # Use smaller grid for faster completion - business needs speed
     if area_km2 > 20:
-        grid_size = 25  # 25x25 = 625 points (fast for large areas)
+        grid_size = 20  # 20x20 = 400 points (fast for large areas)
     elif area_km2 > 5:
-        grid_size = 30  # 30x30 = 900 points (good balance)
+        grid_size = 22  # 22x22 = 484 points (good balance)
     else:
-        grid_size = 35  # 35x35 = 1225 points (high detail for small areas)
+        grid_size = 25  # 25x25 = 625 points (reasonable detail for small areas)
     
     lons = np.linspace(minx, maxx, grid_size)
     lats = np.linspace(miny, maxy, grid_size)

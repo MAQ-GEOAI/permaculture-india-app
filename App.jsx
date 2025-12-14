@@ -1237,12 +1237,12 @@ const App = () => {
       return;
     }
     
-    // Global timeout for entire analysis (90 seconds max - optimized method)
+    // Global timeout for entire analysis (2 minutes max - ensure completion)
     const analysisTimeout = setTimeout(() => {
-      logError('Analysis timed out after 90 seconds');
+      logError('Analysis timed out after 2 minutes');
       showToast('Analysis timed out. Try a smaller area or check backend logs.', 'error');
       setIsAnalyzing(false);
-    }, 90000); // 90 seconds
+    }, 120000); // 2 minutes
     
     try {
       // Test backend health with short timeout (don't block if slow)
@@ -1319,7 +1319,7 @@ const App = () => {
       
       // SRTM DEM method - may take 30-90 seconds (downloading tiles, GDAL processing)
       const [contoursRes, hydrologyRes, slopeAspectRes] = await Promise.allSettled([
-        fetchWithTimeout(contourUrl, 60000).catch(e => { // 1 minute for fast contours
+        fetchWithTimeout(contourUrl, 90000).catch(e => { // 90 seconds for reliable completion
           logWarn('Contours request failed:', e);
           throw e;
         }),
@@ -2895,12 +2895,32 @@ const App = () => {
                 // DO NOT modify position, top, left, or transform - Leaflet manages these!
               });
               
-              // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE LEAFLET TRANSFORMS
+              // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE EXACT POSITIONING
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
-                // DO NOT remove transform - Leaflet uses it for positioning!
-                tile.style.position = 'absolute';
+                
+                // Find corresponding original tile to preserve its exact transform
+                const originalTiles = document.querySelectorAll('img.leaflet-tile');
+                let originalTile = null;
+                originalTiles.forEach(origTile => {
+                  if (origTile.src === tile.src) {
+                    originalTile = origTile;
+                  }
+                });
+                
+                if (originalTile) {
+                  const tileStyle = window.getComputedStyle(originalTile);
+                  tile.style.position = tileStyle.position;
+                  tile.style.top = tileStyle.top;
+                  tile.style.left = tileStyle.left;
+                  tile.style.transform = tileStyle.transform;
+                  tile.style.width = tileStyle.width;
+                  tile.style.height = tileStyle.height;
+                } else {
+                  tile.style.position = 'absolute';
+                }
+                
                 tile.style.imageRendering = 'auto';
                 
                 // Only show satellite tiles - hide OpenTopoMap tiles
@@ -2927,11 +2947,28 @@ const App = () => {
                 overlayPane.style.pointerEvents = 'none';
               }
               
-              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - PRESERVE LEAFLET TRANSFORMS for alignment
+              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - PRESERVE EXACT POSITIONING FROM ORIGINAL
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
-              svgOverlays.forEach((svg) => {
-                // DO NOT remove transform or set top/left to 0 - Leaflet uses transforms for positioning!
-                svg.style.position = 'absolute';
+              const originalSvgs = document.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
+              
+              svgOverlays.forEach((svg, index) => {
+                // Find corresponding original SVG to preserve exact transform
+                const originalSvg = originalSvgs[index] || Array.from(originalSvgs).find(orig => 
+                  orig.getAttribute('class') === svg.getAttribute('class')
+                );
+                
+                if (originalSvg) {
+                  const svgStyle = window.getComputedStyle(originalSvg);
+                  svg.style.position = svgStyle.position;
+                  svg.style.top = svgStyle.top;
+                  svg.style.left = svgStyle.left;
+                  svg.style.transform = svgStyle.transform;
+                  svg.style.width = svgStyle.width;
+                  svg.style.height = svgStyle.height;
+                } else {
+                  svg.style.position = 'absolute';
+                }
+                
                 svg.style.visibility = 'visible';
                 svg.style.opacity = '1';
                 svg.style.display = 'block';
@@ -3230,12 +3267,32 @@ const App = () => {
                 // DO NOT modify position, top, left, or transform - Leaflet manages these!
               });
               
-              // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE LEAFLET TRANSFORMS
+              // CRITICAL: Ensure satellite basemap tiles are visible - PRESERVE EXACT POSITIONING
               const allTiles = clonedMap.querySelectorAll('img.leaflet-tile');
               allTiles.forEach((tile) => {
                 const tileSrc = tile.src || '';
-                // DO NOT remove transform - Leaflet uses it for positioning!
-                tile.style.position = 'absolute';
+                
+                // Find corresponding original tile to preserve its exact transform
+                const originalTiles = document.querySelectorAll('img.leaflet-tile');
+                let originalTile = null;
+                originalTiles.forEach(origTile => {
+                  if (origTile.src === tile.src) {
+                    originalTile = origTile;
+                  }
+                });
+                
+                if (originalTile) {
+                  const tileStyle = window.getComputedStyle(originalTile);
+                  tile.style.position = tileStyle.position;
+                  tile.style.top = tileStyle.top;
+                  tile.style.left = tileStyle.left;
+                  tile.style.transform = tileStyle.transform;
+                  tile.style.width = tileStyle.width;
+                  tile.style.height = tileStyle.height;
+                } else {
+                  tile.style.position = 'absolute';
+                }
+                
                 tile.style.imageRendering = 'auto';
                 
                 // Only show satellite tiles - hide OpenTopoMap tiles
@@ -3262,11 +3319,28 @@ const App = () => {
                 overlayPane.style.pointerEvents = 'none';
               }
               
-              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - PRESERVE LEAFLET TRANSFORMS for alignment
+              // CRITICAL: Fix ALL SVG overlays (contours, etc.) - PRESERVE EXACT POSITIONING FROM ORIGINAL
               const svgOverlays = clonedMap.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
-              svgOverlays.forEach((svg) => {
-                // DO NOT remove transform or set top/left to 0 - Leaflet uses transforms for positioning!
-                svg.style.position = 'absolute';
+              const originalSvgs = document.querySelectorAll('svg.leaflet-zoom-animated, .leaflet-overlay-pane svg');
+              
+              svgOverlays.forEach((svg, index) => {
+                // Find corresponding original SVG to preserve exact transform
+                const originalSvg = originalSvgs[index] || Array.from(originalSvgs).find(orig => 
+                  orig.getAttribute('class') === svg.getAttribute('class')
+                );
+                
+                if (originalSvg) {
+                  const svgStyle = window.getComputedStyle(originalSvg);
+                  svg.style.position = svgStyle.position;
+                  svg.style.top = svgStyle.top;
+                  svg.style.left = svgStyle.left;
+                  svg.style.transform = svgStyle.transform;
+                  svg.style.width = svgStyle.width;
+                  svg.style.height = svgStyle.height;
+                } else {
+                  svg.style.position = 'absolute';
+                }
+                
                 svg.style.visibility = 'visible';
                 svg.style.opacity = '1';
                 svg.style.display = 'block';
