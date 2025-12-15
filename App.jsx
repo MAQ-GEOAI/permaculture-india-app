@@ -3711,27 +3711,126 @@ const App = () => {
         const canvas = await html2canvas(mapContainer, {
           backgroundColor: '#ffffff', // White background instead of transparent
           useCORS: true,
-          logging: false, // Disable logging for production
+          allowTaint: false, // Must be false when using useCORS with data URLs
+          logging: true, // Enable logging for debugging
           width: mapWidth,
           height: mapHeight,
           scale: 1, // Use scale 1 to avoid issues
-          allowTaint: true, // Can be true now since we convert tiles to data URLs
           foreignObjectRendering: true, // Enable for better SVG/contour support
           removeContainer: false,
-          imageTimeout: 60000, // Longer timeout for tiles
+          imageTimeout: 90000, // Longer timeout for tiles (90 seconds)
           onclone: async (clonedDoc) => {
-            // Wait for images to load in clone first
+            // CRITICAL: Convert all tile images to data URLs to bypass CORS restrictions
+            // This is the ONLY reliable way to capture cross-origin tiles with html2canvas
             let clonedMap = clonedDoc.getElementById('leaflet-map-container');
             if (clonedMap) {
-              const images = clonedMap.querySelectorAll('img');
-              await Promise.all(Array.from(images).map(img => {
-                if (img.complete && img.naturalWidth > 0) return Promise.resolve();
-                return new Promise((resolve) => {
-                  img.onload = resolve;
-                  img.onerror = resolve; // Continue even if image fails
-                  setTimeout(resolve, 3000); // Timeout after 3s
+              const images = clonedMap.querySelectorAll('img.leaflet-tile');
+              console.log(`[PDF EXPORT] Converting ${images.length} tiles to data URLs to bypass CORS...`);
+              
+              // CRITICAL: First preserve ALL tile positioning BEFORE converting to data URLs
+              // This ensures alignment is maintained
+              const originalTiles = document.querySelectorAll('img.leaflet-tile');
+              const tilePositionMap = new Map();
+              
+              // Store original tile positions and transforms
+              originalTiles.forEach((origTile, idx) => {
+                const origStyle = window.getComputedStyle(origTile);
+                tilePositionMap.set(origTile.src, {
+                  position: origStyle.position,
+                  top: origStyle.top,
+                  left: origStyle.left,
+                  transform: origStyle.transform,
+                  width: origStyle.width,
+                  height: origStyle.height,
+                  tile: origTile
                 });
+              });
+              
+              // Now convert each tile image to canvas/data URL while preserving positioning
+              await Promise.all(Array.from(images).map(async (img, idx) => {
+                try {
+                  // Skip if already a data URL
+                  if (img.src && img.src.startsWith('data:')) {
+                    console.log(`[PDF EXPORT] Tile ${idx + 1}/${images.length} already data URL`);
+                    // Still preserve positioning even if already converted
+                    const posData = tilePositionMap.get(img.getAttribute('data-original-src') || img.src);
+                    if (posData) {
+                      img.style.position = posData.position;
+                      img.style.top = posData.top;
+                      img.style.left = posData.left;
+                      img.style.transform = posData.transform;
+                      img.style.width = posData.width;
+                      img.style.height = posData.height;
+                    }
+                    return;
+                  }
+                  
+                  // Store original src for later matching
+                  const originalSrc = img.src;
+                  img.setAttribute('data-original-src', originalSrc);
+                  
+                  // Get corresponding original tile using stored position map
+                  const posData = tilePositionMap.get(originalSrc);
+                  if (!posData) {
+                    console.warn(`[PDF EXPORT] Original tile position not found for ${idx + 1}`);
+                    return;
+                  }
+                  
+                  const originalTile = posData.tile;
+                  
+                  // CRITICAL: Preserve positioning BEFORE conversion
+                  img.style.position = posData.position;
+                  img.style.top = posData.top;
+                  img.style.left = posData.left;
+                  img.style.transform = posData.transform;
+                  img.style.width = posData.width;
+                  img.style.height = posData.height;
+                  
+                  // Wait for original tile to load
+                  if (!originalTile.complete || originalTile.naturalWidth === 0) {
+                    await new Promise((resolve) => {
+                      if (originalTile.complete) {
+                        resolve();
+                      } else {
+                        originalTile.onload = resolve;
+                        originalTile.onerror = resolve;
+                        setTimeout(resolve, 5000);
+                      }
+                    });
+                  }
+                  
+                  // Convert to canvas then data URL
+                  if (originalTile.naturalWidth > 0 && originalTile.naturalHeight > 0) {
+                    const canvas = clonedDoc.createElement('canvas');
+                    canvas.width = originalTile.naturalWidth;
+                    canvas.height = originalTile.naturalHeight;
+                    const ctx = canvas.getContext('2d');
+                    
+                    // Draw the image to canvas
+                    ctx.drawImage(originalTile, 0, 0);
+                    
+                    // Convert to data URL
+                    const dataURL = canvas.toDataURL('image/png');
+                    
+                    // Replace img src with data URL (positioning already preserved above)
+                    img.src = dataURL;
+                    img.crossOrigin = null; // Remove crossOrigin since it's now a data URL
+                    
+                    console.log(`[PDF EXPORT] Tile ${idx + 1}/${images.length} converted to data URL with positioning preserved`);
+                  }
+                } catch (error) {
+                  console.warn(`[PDF EXPORT] Failed to convert tile ${idx + 1}:`, error);
+                  // If conversion fails, try to at least ensure it's visible
+                  img.style.visibility = 'visible';
+                  img.style.opacity = '1';
+                  img.style.display = 'block';
+                }
               }));
+              
+              console.log(`[PDF EXPORT] All ${images.length} tiles converted`);
+              
+              // Additional wait to ensure images are rendered
+              await new Promise(resolve => setTimeout(resolve, 500));
             }
             
             // Now ensure map container is visible in clone - PRESERVE EXACT POSITIONING
