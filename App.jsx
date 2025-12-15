@@ -214,8 +214,11 @@ const App = () => {
   
   // UI State
   const [sidebarCollapsed, setSidebarCollapsed] = useState({});
+  const [sidebarHidden, setSidebarHidden] = useState(false);
   const [show3D, setShow3D] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [analysisProgress, setAnalysisProgress] = useState({ current: 0, total: 0, message: '' });
+  const analysisAbortControllerRef = useRef(null); // For cancelling analysis
   
   // Safety: Clear analyzing state on unmount
   useEffect(() => {
@@ -900,21 +903,62 @@ const App = () => {
     return `${Math.min(...lngs)},${Math.min(...lats)},${Math.max(...lngs)},${Math.max(...lats)}`;
   };
   
-  const showToast = (message, type = 'info') => {
-    // Create toast notification
-    const toast = document.createElement('div');
-    toast.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-lg z-50 ${
-      type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-emerald-600' : 'bg-blue-600'
-    } text-white font-medium`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
+  // Enhanced Toast System with queue management and better UX
+  const toastQueueRef = useRef([]);
+  const activeToastsRef = useRef(new Set());
+  
+  const showToast = useCallback((message, type = 'info', duration = 4000) => {
+    if (!message || typeof message !== 'string') return;
     
-    setTimeout(() => {
+    const toastId = `toast-${Date.now()}-${Math.random()}`;
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `fixed top-4 right-4 px-4 py-3 rounded-lg shadow-xl z-[9999] ${
+      type === 'error' ? 'bg-red-600' : 
+      type === 'success' ? 'bg-emerald-600' : 
+      type === 'warning' ? 'bg-amber-500' : 
+      'bg-blue-600'
+    } text-white font-medium text-sm max-w-md transform transition-all duration-300 translate-x-full`;
+    
+    // Add icon based on type
+    const icons = {
+      error: '❌',
+      success: '✅',
+      warning: '⚠️',
+      info: 'ℹ️'
+    };
+    
+    toast.innerHTML = `
+      <div class="flex items-center gap-2">
+        <span class="text-lg">${icons[type] || icons.info}</span>
+        <span class="flex-1">${message}</span>
+        <button onclick="this.closest('[id^=toast-]').remove()" class="ml-2 text-white hover:text-gray-200 font-bold" aria-label="Close">×</button>
+      </div>
+    `;
+    
+    document.body.appendChild(toast);
+    activeToastsRef.current.add(toastId);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+      toast.style.transform = 'translateX(0)';
+    });
+    
+    // Auto-remove after duration
+    const timeout = setTimeout(() => {
+      toast.style.transform = 'translateX(100%)';
       toast.style.opacity = '0';
-      toast.style.transition = 'opacity 0.3s';
-      setTimeout(() => toast.remove(), 300);
-    }, 3000);
-  };
+      setTimeout(() => {
+        if (toast.parentNode) {
+          toast.remove();
+        }
+        activeToastsRef.current.delete(toastId);
+      }, 300);
+    }, duration);
+    
+    // Store timeout for manual removal
+    toast.dataset.timeout = timeout;
+  }, []);
   
   // Helper function to calculate color from normalized elevation (0-1)
   const getColorFromNormalized = useCallback((normalized) => {
@@ -1275,13 +1319,25 @@ const App = () => {
       const boldParam = (contourBoldInterval && contourBoldInterval > 0) ? `&bold_interval=${contourBoldInterval}` : '';
       const contourUrl = `${BACKEND_URL}/contours?bbox=${bbox}&interval=${contourInterval}${boldParam}`;
       
-      // Helper function to add timeout to fetch - bulletproof version
-      const fetchWithTimeout = (url, timeout = 120000) => {
+      // Helper function to add timeout to fetch - bulletproof version with cancellation support
+      const fetchWithTimeout = (url, timeout = 120000, progressMessage = '') => {
         const controller = new AbortController();
         let timeoutId;
         
+        // Combine signals: both timeout and analysis cancellation
+        if (signal.aborted) {
+          throw new Error('Analysis cancelled');
+        }
+        
+        // Create combined abort controller
+        const combinedSignal = signal.aborted ? controller.signal : signal;
+        
+        if (progressMessage) {
+          setAnalysisProgress(prev => ({ ...prev, message: progressMessage }));
+        }
+        
         const fetchPromise = fetch(url, { 
-          signal: controller.signal,
+          signal: combinedSignal,
           mode: 'cors',
           cache: 'no-cache'
         });
@@ -1715,6 +1771,12 @@ const App = () => {
     } catch (error) {
       // Handle backend connection errors gracefully
       console.error('Analysis error:', error);
+      
+      if (signal.aborted || error.message?.includes('cancelled')) {
+        showToast('Analysis cancelled by user', 'info');
+        return;
+      }
+      
       if (error.message?.includes('Failed to fetch') || error.message?.includes('ERR_CONNECTION_REFUSED')) {
         showToast('Backend server not responding. Check deployment status.', 'error');
       } else if (error.message?.includes('timeout')) {
@@ -1724,8 +1786,10 @@ const App = () => {
       }
     } finally {
       // ALWAYS clear timeout and analysis state
-      clearTimeout(analysisTimeout);
+      if (analysisTimeout) clearTimeout(analysisTimeout);
       setIsAnalyzing(false);
+      setAnalysisProgress({ current: 0, total: 0, message: '' });
+      analysisAbortControllerRef.current = null;
       log('Analysis completed - isAnalyzing cleared');
     }
   };
