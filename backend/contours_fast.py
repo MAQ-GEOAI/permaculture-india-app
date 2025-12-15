@@ -80,18 +80,19 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
     """ULTRA-FAST contour generation - optimized for business delivery - completes in <50s"""
     minx, miny, maxx, maxy = map(float, bbox.split(","))
     
-    # Calculate grid size (optimized for ACCURACY - business needs accurate contours)
+    # Calculate grid size (optimized for MAXIMUM ACCURACY - professional GIS quality)
     area_km2 = abs((maxx - minx) * (maxy - miny)) * 111 * 111
     
-    # Use MAXIMUM resolution for accuracy - match professional GIS standards
+    # Use HIGHER resolution for better accuracy - increased from previous values
+    # Professional GIS tools use 100-200 points per km² for accurate contours
     if area_km2 > 20:
-        grid_size = 60  # 60x60 = 3600 points (high accuracy for large areas)
+        grid_size = 80  # 80x80 = 6400 points (increased from 60)
     elif area_km2 > 10:
-        grid_size = 70  # 70x70 = 4900 points (very high accuracy)
+        grid_size = 90  # 90x90 = 8100 points (increased from 70)
     elif area_km2 > 5:
-        grid_size = 80  # 80x80 = 6400 points (maximum accuracy)
+        grid_size = 100  # 100x100 = 10000 points (increased from 80, max API limit)
     else:
-        grid_size = 90  # 90x90 = 8100 points (ultra-high accuracy for small areas)
+        grid_size = 100  # 100x100 = 10000 points (maximum for small areas)
     
     # Cap at 100x100 = 10000 points (API limit, but use maximum for accuracy)
     grid_size = min(grid_size, 100)

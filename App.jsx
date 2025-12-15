@@ -168,10 +168,16 @@ const App = () => {
       subdomains: ['a', 'b', 'c', 'd']
     },
     esriWorldTopo: {
-      name: 'Esri World Topographic',
+      name: 'Esri World Topographic (Contours)',
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Topo_Map/MapServer/tile/{z}/{y}/{x}',
       attribution: '© Esri',
       maxZoom: 19
+    },
+    usgsTopo: {
+      name: 'USGS Topographic (Contours)',
+      url: 'https://basemap.nationalmap.gov/arcgis/rest/services/USGSImageryTopo/MapServer/tile/{z}/{y}/{x}',
+      attribution: '© USGS',
+      maxZoom: 16
     },
     esriWorldStreet: {
       name: 'Esri World Street Map',
