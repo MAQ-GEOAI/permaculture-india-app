@@ -3059,23 +3059,30 @@ const App = () => {
                   }
                   
                   // Convert to canvas then data URL
+                  // CRITICAL: Use document.createElement, not clonedDoc.createElement, to avoid constructor errors
                   if (originalTile.naturalWidth > 0 && originalTile.naturalHeight > 0) {
-                    const canvas = clonedDoc.createElement('canvas');
-                    canvas.width = originalTile.naturalWidth;
-                    canvas.height = originalTile.naturalHeight;
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Draw the image to canvas
-                    ctx.drawImage(originalTile, 0, 0);
-                    
-                    // Convert to data URL
-                    const dataURL = canvas.toDataURL('image/png');
-                    
-                    // Replace img src with data URL (positioning already preserved above)
-                    img.src = dataURL;
-                    img.crossOrigin = null; // Remove crossOrigin since it's now a data URL
-                    
-                    console.log(`[PNG EXPORT] Tile ${idx + 1}/${images.length} converted to data URL with positioning preserved`);
+                    try {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = originalTile.naturalWidth;
+                      canvas.height = originalTile.naturalHeight;
+                      const ctx = canvas.getContext('2d');
+                      
+                      // Draw the image to canvas
+                      ctx.drawImage(originalTile, 0, 0);
+                      
+                      // Convert to data URL
+                      const dataURL = canvas.toDataURL('image/png');
+                      
+                      // Replace img src with data URL (positioning already preserved above)
+                      img.src = dataURL;
+                      img.crossOrigin = null; // Remove crossOrigin since it's now a data URL
+                      
+                      console.log(`[PNG EXPORT] Tile ${idx + 1}/${images.length} converted to data URL with positioning preserved`);
+                    } catch (canvasError) {
+                      console.warn(`[PNG EXPORT] Canvas conversion failed for tile ${idx + 1}, using original src:`, canvasError);
+                      // Fallback: try to use original tile directly
+                      img.src = originalTile.src;
+                    }
                   }
                 } catch (error) {
                   console.warn(`[PNG EXPORT] Failed to convert tile ${idx + 1}:`, error);
@@ -3115,13 +3122,13 @@ const App = () => {
                 clonedMap.style.overflow = originalStyle.overflow || 'visible';
               } else {
                 // Fallback if original not found
-                clonedMap.style.visibility = 'visible';
-                clonedMap.style.display = 'block';
+              clonedMap.style.visibility = 'visible';
+              clonedMap.style.display = 'block';
                 clonedMap.style.position = 'relative';
-                clonedMap.style.width = mapWidth + 'px';
-                clonedMap.style.height = mapHeight + 'px';
-                clonedMap.style.margin = '0';
-                clonedMap.style.padding = '0';
+              clonedMap.style.width = mapWidth + 'px';
+              clonedMap.style.height = mapHeight + 'px';
+              clonedMap.style.margin = '0';
+              clonedMap.style.padding = '0';
                 clonedMap.style.zIndex = '1';
                 clonedMap.style.backgroundColor = '#ffffff';
                 clonedMap.style.overflow = 'visible';
@@ -3194,9 +3201,9 @@ const App = () => {
                   // CRITICAL: Copy the actual image source - ensure it's loaded
                   if (originalTile.complete && originalTile.naturalWidth > 0) {
                     // Image is loaded - ensure it's visible
-                    tile.style.visibility = 'visible';
-                    tile.style.opacity = '1';
-                    tile.style.display = 'block';
+                tile.style.visibility = 'visible';
+                tile.style.opacity = '1';
+                tile.style.display = 'block';
                     tile.style.zIndex = '100';
                     tile.style.imageRendering = 'auto';
                     tile.style.objectFit = 'fill';
@@ -3214,7 +3221,7 @@ const App = () => {
                     tile.style.display = 'block';
                   }
                 } else {
-                  tile.style.position = 'absolute';
+                tile.style.position = 'absolute';
                 }
                 
                 tile.style.imageRendering = 'auto';
@@ -3285,7 +3292,7 @@ const App = () => {
                   svg.style.width = svgStyle.width;
                   svg.style.height = svgStyle.height;
                 } else {
-                  svg.style.position = 'absolute';
+                svg.style.position = 'absolute';
                 }
                 
                 svg.style.visibility = 'visible';
@@ -3501,7 +3508,7 @@ const App = () => {
                   (el.textContent && el.textContent.includes('Map Legend'))
                 );
                 if (!isLegend || !showLegend) {
-                  el.style.display = 'none';
+                el.style.display = 'none';
                 } else {
                   // Ensure legend is visible and properly positioned
                   el.style.visibility = 'visible';
@@ -3800,23 +3807,30 @@ const App = () => {
                   }
                   
                   // Convert to canvas then data URL
+                  // CRITICAL: Use document.createElement, not clonedDoc.createElement, to avoid constructor errors
                   if (originalTile.naturalWidth > 0 && originalTile.naturalHeight > 0) {
-                    const canvas = clonedDoc.createElement('canvas');
-                    canvas.width = originalTile.naturalWidth;
-                    canvas.height = originalTile.naturalHeight;
-                    const ctx = canvas.getContext('2d');
-                    
-                    // Draw the image to canvas
-                    ctx.drawImage(originalTile, 0, 0);
-                    
-                    // Convert to data URL
-                    const dataURL = canvas.toDataURL('image/png');
-                    
-                    // Replace img src with data URL (positioning already preserved above)
-                    img.src = dataURL;
-                    img.crossOrigin = null; // Remove crossOrigin since it's now a data URL
-                    
-                    console.log(`[PDF EXPORT] Tile ${idx + 1}/${images.length} converted to data URL with positioning preserved`);
+                    try {
+                      const canvas = document.createElement('canvas');
+                      canvas.width = originalTile.naturalWidth;
+                      canvas.height = originalTile.naturalHeight;
+                      const ctx = canvas.getContext('2d');
+                      
+                      // Draw the image to canvas
+                      ctx.drawImage(originalTile, 0, 0);
+                      
+                      // Convert to data URL
+                      const dataURL = canvas.toDataURL('image/png');
+                      
+                      // Replace img src with data URL (positioning already preserved above)
+                      img.src = dataURL;
+                      img.crossOrigin = null; // Remove crossOrigin since it's now a data URL
+                      
+                      console.log(`[PDF EXPORT] Tile ${idx + 1}/${images.length} converted to data URL with positioning preserved`);
+                    } catch (canvasError) {
+                      console.warn(`[PDF EXPORT] Canvas conversion failed for tile ${idx + 1}, using original src:`, canvasError);
+                      // Fallback: try to use original tile directly
+                      img.src = originalTile.src;
+                    }
                   }
                 } catch (error) {
                   console.warn(`[PDF EXPORT] Failed to convert tile ${idx + 1}:`, error);
@@ -3856,13 +3870,13 @@ const App = () => {
                 clonedMap.style.overflow = originalStyle.overflow || 'visible';
               } else {
                 // Fallback if original not found
-                clonedMap.style.visibility = 'visible';
-                clonedMap.style.display = 'block';
+              clonedMap.style.visibility = 'visible';
+              clonedMap.style.display = 'block';
                 clonedMap.style.position = 'relative';
-                clonedMap.style.width = mapWidth + 'px';
-                clonedMap.style.height = mapHeight + 'px';
-                clonedMap.style.margin = '0';
-                clonedMap.style.padding = '0';
+              clonedMap.style.width = mapWidth + 'px';
+              clonedMap.style.height = mapHeight + 'px';
+              clonedMap.style.margin = '0';
+              clonedMap.style.padding = '0';
                 clonedMap.style.zIndex = '1';
                 clonedMap.style.backgroundColor = '#ffffff';
                 clonedMap.style.overflow = 'visible';
@@ -3935,9 +3949,9 @@ const App = () => {
                   // CRITICAL: Copy the actual image source - ensure it's loaded
                   if (originalTile.complete && originalTile.naturalWidth > 0) {
                     // Image is loaded - ensure it's visible
-                    tile.style.visibility = 'visible';
-                    tile.style.opacity = '1';
-                    tile.style.display = 'block';
+                tile.style.visibility = 'visible';
+                tile.style.opacity = '1';
+                tile.style.display = 'block';
                     tile.style.zIndex = '100';
                     tile.style.imageRendering = 'auto';
                     tile.style.objectFit = 'fill';
@@ -3955,7 +3969,7 @@ const App = () => {
                     tile.style.display = 'block';
                   }
                 } else {
-                  tile.style.position = 'absolute';
+                tile.style.position = 'absolute';
                 }
                 
                 tile.style.imageRendering = 'auto';
@@ -4026,7 +4040,7 @@ const App = () => {
                   svg.style.width = svgStyle.width;
                   svg.style.height = svgStyle.height;
                 } else {
-                  svg.style.position = 'absolute';
+                svg.style.position = 'absolute';
                 }
                 
                 svg.style.visibility = 'visible';
@@ -4242,7 +4256,7 @@ const App = () => {
                   (el.textContent && el.textContent.includes('Map Legend'))
                 );
                 if (!isLegend || !showLegend) {
-                  el.style.display = 'none';
+                el.style.display = 'none';
                 } else {
                   // Ensure legend is visible and properly positioned
                   el.style.visibility = 'visible';
@@ -4547,10 +4561,18 @@ const App = () => {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden">
       {/* SIDEBAR */}
-      <div className="w-80 bg-slate-800/95 backdrop-blur-sm border-r border-slate-700/50 flex flex-col overflow-y-auto shadow-2xl">
+      <div className={`${sidebarHidden ? 'w-0 -translate-x-full' : 'w-80'} transition-all duration-300 ease-in-out bg-slate-800/95 backdrop-blur-sm border-r border-slate-700/50 flex flex-col overflow-y-auto shadow-2xl overflow-hidden`}>
         {/* Header */}
-        <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-emerald-900/20 to-teal-900/20">
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-2 flex items-center gap-2">
+        <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-emerald-900/20 to-teal-900/20 relative">
+          <button
+            onClick={() => setSidebarHidden(!sidebarHidden)}
+            className="absolute top-4 right-4 p-1.5 bg-slate-700/80 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors z-10"
+            title={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+            aria-label={sidebarHidden ? "Show sidebar" : "Hide sidebar"}
+          >
+            {sidebarHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+          </button>
+          <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-2 flex items-center gap-2 pr-8">
             <Mountain className="w-6 h-6 text-emerald-400" />
             Permaculture Intelligence
           </h1>
@@ -5210,7 +5232,18 @@ const App = () => {
       </div>
       
       {/* MAP CONTAINER */}
-      <div className="flex-1 relative" style={{ minHeight: '100vh', width: '100%' }}>
+      <div className={`${sidebarHidden ? 'w-full' : 'flex-1'} relative transition-all duration-300`} style={{ minHeight: '100vh' }}>
+        {/* Show Sidebar Button (when hidden) */}
+        {sidebarHidden && (
+          <button
+            onClick={() => setSidebarHidden(false)}
+            className="absolute top-4 left-4 z-[1000] p-2 bg-slate-800/95 backdrop-blur-sm hover:bg-slate-700 text-slate-200 rounded-lg shadow-xl border border-slate-700/50 transition-colors"
+            title="Show sidebar"
+            aria-label="Show sidebar"
+          >
+            <Eye className="w-5 h-5" />
+          </button>
+        )}
         <div 
           ref={mapRef} 
           className="w-full h-full" 

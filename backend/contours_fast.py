@@ -172,9 +172,9 @@ def generate_from_elevation_api(bbox, interval, bold_interval, start_time):
                 for idx, (i, j) in enumerate([(i, j) for i in range(len(lats)) for j in range(len(lons)) if nan_mask[i, j]]):
                     elevation_grid[i, j] = interpolated[idx]
         
-        # Smooth the elevation grid for better contours (light smoothing to preserve accuracy)
-        elevation_grid = gaussian_filter(elevation_grid, sigma=0.3)  # Reduced sigma for less smoothing, more accuracy
-        log("Applied scipy cubic interpolation and light smoothing for maximum accuracy")
+        # Smooth the elevation grid for better contours (minimal smoothing to preserve maximum accuracy)
+        elevation_grid = gaussian_filter(elevation_grid, sigma=0.2)  # Further reduced sigma (0.2) for maximum accuracy
+        log("Applied scipy cubic interpolation and minimal smoothing (sigma=0.2) for maximum accuracy")
     except ImportError:
         # Fallback: simple mean fill
         mean_elev = np.nanmean(elevation_grid)
