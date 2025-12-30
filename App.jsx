@@ -179,6 +179,13 @@ const App = () => {
       attribution: '© USGS',
       maxZoom: 16
     },
+    openTopoMapIndia: {
+      name: 'OpenTopoMap India (Contours)',
+      url: 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',
+      attribution: '© OpenTopoMap © OpenStreetMap',
+      maxZoom: 17,
+      subdomains: ['a', 'b', 'c']
+    },
     esriWorldStreet: {
       name: 'Esri World Street Map',
       url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
@@ -1083,33 +1090,67 @@ const App = () => {
         regularContours.addLayer(contourLine);
       }
       
-      // Add elevation label if enabled
+      // REVAMPED: Accurate elevation label placement with improved positioning
       if (contourShowLabels && elevation !== null && elevation !== undefined) {
-        // Place label at midpoint of contour line
-        const midIndex = Math.floor(latlngs.length / 2);
-        const labelPos = latlngs[midIndex];
+        // Use precise elevation value from backend if available
+        const preciseElevation = props.elevation_precise || elevation;
+        const displayElevation = Number.isInteger(preciseElevation) 
+          ? Math.round(preciseElevation) 
+          : preciseElevation.toFixed(1);
         
-        // Create label with elevation text - improved visibility for satellite basemap
+        // REVAMPED: Better label positioning algorithm
+        // Find the best position for label (prefer straight segments, avoid sharp curves)
+        let labelPos = latlngs[Math.floor(latlngs.length / 2)]; // Default to midpoint
+        let bestIndex = Math.floor(latlngs.length / 2);
+        
+        // Find the flattest segment (best for label readability)
+        if (latlngs.length > 10) {
+          let minCurvature = Infinity;
+          for (let i = 5; i < latlngs.length - 5; i++) {
+            // Calculate curvature at this point
+            const prev = latlngs[i - 2];
+            const curr = latlngs[i];
+            const next = latlngs[i + 2];
+            
+            // Calculate angle change (lower = straighter = better for labels)
+            const angle1 = Math.atan2(curr[0] - prev[0], curr[1] - prev[1]);
+            const angle2 = Math.atan2(next[0] - curr[0], next[1] - curr[1]);
+            const curvature = Math.abs(angle2 - angle1);
+            
+            if (curvature < minCurvature) {
+              minCurvature = curvature;
+              bestIndex = i;
+              labelPos = curr;
+            }
+          }
+        }
+        
+        // Create label with accurate elevation - professional styling
         const labelDiv = L.divIcon({
           className: 'contour-label',
           html: `<div style="
-            background: rgba(255, 255, 255, 0.95);
+            background: rgba(255, 255, 255, 0.98);
             border: 2px solid ${color};
-            border-radius: 4px;
-            padding: 3px 8px;
-            font-size: ${isBold ? '13px' : '11px'};
-            font-weight: ${isBold ? 'bold' : '600'};
+            border-radius: 6px;
+            padding: 4px 10px;
+            font-size: ${isBold ? '13px' : '12px'};
+            font-weight: ${isBold ? 'bold' : '700'};
             color: ${color};
             white-space: nowrap;
             pointer-events: none;
-            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8), 0 0 4px rgba(255, 255, 255, 0.5);
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
-          ">${elevation}m</div>`,
-          iconSize: [60, 24],
-          iconAnchor: [30, 12]
+            text-shadow: 0 1px 3px rgba(255, 255, 255, 0.9), 0 0 6px rgba(255, 255, 255, 0.6);
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.4);
+            font-family: 'Segoe UI', 'Roboto', 'Arial', sans-serif;
+            letter-spacing: 0.3px;
+          ">${displayElevation}m</div>`,
+          iconSize: [70, 28],
+          iconAnchor: [35, 14]
         });
         
-        const labelMarker = L.marker(labelPos, { icon: labelDiv });
+        const labelMarker = L.marker(labelPos, { 
+          icon: labelDiv,
+          zIndexOffset: 1000 + (isBold ? 100 : 0) // Ensure labels are above contours
+        });
         labelMarkersRef.current.push(labelMarker);
         
         if (forceVisible !== null ? forceVisible : layerVisibility.contours) {
@@ -4630,10 +4671,10 @@ const App = () => {
   // Main render
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 overflow-hidden">
-      {/* SIDEBAR */}
-      <div className={`${sidebarHidden ? 'w-0 -translate-x-full' : 'w-80'} transition-all duration-300 ease-in-out bg-slate-800/95 backdrop-blur-sm border-r border-slate-700/50 flex flex-col overflow-y-auto shadow-2xl overflow-hidden`}>
-        {/* Header */}
-        <div className="p-4 border-b border-slate-700/50 bg-gradient-to-r from-emerald-900/20 to-teal-900/20 relative">
+      {/* REVAMPED: SIDEBAR - High Quality Modern UI/UX */}
+      <div className={`${sidebarHidden ? 'w-0 -translate-x-full' : 'w-80'} transition-all duration-300 ease-in-out bg-gradient-to-b from-slate-900/98 via-slate-800/95 to-slate-900/98 backdrop-blur-xl border-r border-slate-700/30 flex flex-col overflow-y-auto shadow-2xl overflow-hidden`}>
+        {/* REVAMPED: Header - Enhanced Design */}
+        <div className="p-5 border-b border-slate-700/30 bg-gradient-to-r from-emerald-900/30 via-teal-900/20 to-indigo-900/20 relative backdrop-blur-sm">
           <button
             onClick={() => setSidebarHidden(!sidebarHidden)}
             className="absolute top-4 right-4 p-1.5 bg-slate-700/80 hover:bg-slate-600 text-slate-300 rounded-lg transition-colors z-10"
@@ -4642,9 +4683,9 @@ const App = () => {
           >
             {sidebarHidden ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
           </button>
-          <h1 className="text-2xl font-bold bg-gradient-to-r from-emerald-400 to-teal-400 bg-clip-text text-transparent mb-2 flex items-center gap-2 pr-8">
-            <Mountain className="w-6 h-6 text-emerald-400" />
-            Permaculture Intelligence
+          <h1 className="text-2xl font-extrabold bg-gradient-to-r from-emerald-400 via-teal-400 to-indigo-400 bg-clip-text text-transparent mb-2 flex items-center gap-2 pr-8 drop-shadow-lg">
+            <Mountain className="w-7 h-7 text-emerald-400 drop-shadow-md" />
+            <span className="tracking-tight">Permaculture Intelligence</span>
           </h1>
           {userId && (
             <p className="text-xs text-slate-400 font-mono break-all">
@@ -4688,8 +4729,8 @@ const App = () => {
           </div>
         )}
         
-        {/* Project Management Section */}
-        <div className="p-4 border-b border-slate-700">
+        {/* REVAMPED: Project Management Section - Enhanced UI */}
+        <div className="p-4 border-b border-slate-700/30 bg-slate-800/30">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
               <FolderOpen className="w-5 h-5" />
@@ -4775,8 +4816,8 @@ const App = () => {
           )}
         </div>
         
-        {/* AOI Tools */}
-        <div className="p-4 border-b border-slate-700">
+        {/* REVAMPED: AOI Tools - Enhanced UI */}
+        <div className="p-4 border-b border-slate-700/30 bg-slate-800/20">
           <h2 className="text-lg font-semibold text-slate-200 mb-3 flex items-center gap-2">
             <Map className="w-5 h-5" />
             Area of Interest
@@ -4785,7 +4826,7 @@ const App = () => {
             <button
               onClick={startDrawing}
               disabled={drawing}
-              className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded font-medium transition-all"
+              className="w-full px-4 py-3 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
               title="Draw a polygon on the map to define your area of interest"
               aria-label="Start drawing area of interest"
             >
@@ -4819,8 +4860,8 @@ const App = () => {
         </div>
         
         
-        {/* Layer Management */}
-        <div className="p-4 border-b border-slate-700">
+        {/* REVAMPED: Layer Management - Enhanced UI */}
+        <div className="p-4 border-b border-slate-700/30 bg-slate-800/20">
           <div className="flex items-center justify-between mb-3">
             <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
               <Layers className="w-5 h-5" />
@@ -4993,12 +5034,12 @@ const App = () => {
           )}
         </div>
         
-        {/* Analysis Button */}
-        <div className="p-4 border-b border-slate-700">
+        {/* REVAMPED: Analysis Button - Enhanced UI */}
+        <div className="p-4 border-b border-slate-700/30 bg-gradient-to-br from-blue-900/20 to-indigo-900/20">
           <button
             onClick={runAnalysis}
             disabled={isAnalyzing || !aoi}
-            className="w-full px-4 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded font-medium flex items-center justify-center gap-2 transition-all shadow-lg hover:shadow-xl"
+            className="w-full px-4 py-3 bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-700 hover:via-indigo-700 hover:to-purple-700 disabled:from-slate-600 disabled:via-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-lg font-bold flex items-center justify-center gap-2 transition-all shadow-xl hover:shadow-2xl transform hover:scale-[1.02] active:scale-[0.98] text-base"
             title={!aoi ? "Please draw an Area of Interest first" : "Run comprehensive analysis including contours, hydrology, and sun path"}
             aria-label="Run analysis"
           >
@@ -5022,11 +5063,11 @@ const App = () => {
           )}
         </div>
         
-        {/* Contour Settings */}
-        <div className="p-4 border-b border-slate-700">
-          <div className="flex items-center gap-2 mb-3">
-            <Mountain className="w-5 h-5 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-slate-200">Contour Settings</h3>
+        {/* REVAMPED: Contour Settings - Enhanced UI */}
+        <div className="p-4 border-b border-slate-700/30 bg-gradient-to-br from-emerald-900/10 to-teal-900/10">
+          <div className="flex items-center gap-2 mb-4">
+            <Mountain className="w-5 h-5 text-emerald-400 drop-shadow-sm" />
+            <h3 className="text-sm font-bold text-slate-100">Contour Settings</h3>
           </div>
           
           <div className="space-y-3">
@@ -5261,16 +5302,18 @@ const App = () => {
           )}
         </div>
         
-        {/* Advanced AI Advisory */}
-        <div className="p-4 border-b border-slate-700">
+        {/* REVAMPED: Advanced AI Advisory - High Quality UI/UX */}
+        <div className="p-4 border-b border-slate-700/50 bg-gradient-to-br from-purple-900/10 to-indigo-900/10">
           <div className="flex items-center justify-between mb-3">
-            <h2 className="text-lg font-semibold text-slate-200 flex items-center gap-2">
-              <Sparkles className="w-5 h-5" />
-              AI Advisory
+            <h2 className="text-lg font-bold text-slate-100 flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-400 animate-pulse" />
+              <span className="bg-gradient-to-r from-purple-400 to-indigo-400 bg-clip-text text-transparent">
+                AI Design Advisor
+              </span>
             </h2>
             <button
               onClick={() => toggleSection('ai')}
-              className="text-slate-400 hover:text-slate-200"
+              className="text-slate-400 hover:text-purple-400 transition-colors p-1 rounded hover:bg-slate-700/50"
             >
               {sidebarCollapsed.ai ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
             </button>
@@ -5278,22 +5321,68 @@ const App = () => {
           
           {!sidebarCollapsed.ai && (
             <div className="space-y-3">
-              <textarea
-                value={aiGoal}
-                onChange={(e) => setAiGoal(e.target.value)}
-                placeholder="Enter design goal (e.g., maximize water storage)"
-                className="w-full px-3 py-2 bg-slate-700 text-slate-200 rounded border border-slate-600 focus:border-emerald-500 focus:outline-none text-sm h-20 resize-none"
-              />
+              <div className="relative">
+                <textarea
+                  value={aiGoal}
+                  onChange={(e) => setAiGoal(e.target.value)}
+                  placeholder="Describe your permaculture design goal...&#10;e.g., 'Maximize water storage and create food forest'"
+                  className="w-full px-4 py-3 bg-slate-800/80 backdrop-blur-sm text-slate-100 rounded-lg border-2 border-slate-600/50 focus:border-purple-500 focus:outline-none focus:ring-2 focus:ring-purple-500/20 text-sm h-24 resize-none transition-all placeholder:text-slate-500"
+                />
+                <div className="absolute bottom-2 right-2 text-xs text-slate-500">
+                  {aiGoal.length}/500
+                </div>
+              </div>
               <button
                 onClick={generateAIStrategy}
-                className="w-full px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-sm"
+                disabled={!aiGoal.trim() || isAnalyzing}
+                className="w-full px-4 py-3 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 disabled:from-slate-600 disabled:to-slate-600 disabled:cursor-not-allowed text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] active:scale-[0.98]"
               >
-                Generate Strategy
+                {isAnalyzing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Analyzing...</span>
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4" />
+                    <span>Generate AI Strategy</span>
+                  </>
+                )}
               </button>
               
               {aiStrategy && (
-                <div className="mt-3 p-3 bg-slate-700 rounded text-sm text-slate-200 whitespace-pre-line">
-                  {aiStrategy}
+                <div className="mt-3 p-4 bg-gradient-to-br from-slate-800/90 to-slate-900/90 backdrop-blur-sm rounded-lg border border-purple-500/30 shadow-xl">
+                  <div className="flex items-center gap-2 mb-3 pb-2 border-b border-purple-500/20">
+                    <Sparkles className="w-4 h-4 text-purple-400" />
+                    <h3 className="text-sm font-bold text-purple-300">AI Recommendations</h3>
+                  </div>
+                  <div className="text-sm text-slate-200 whitespace-pre-line leading-relaxed space-y-2">
+                    {aiStrategy.split('\n').map((line, idx) => {
+                      if (line.trim().startsWith('•') || line.trim().startsWith('-')) {
+                        return (
+                          <div key={idx} className="flex items-start gap-2 pl-2">
+                            <span className="text-purple-400 mt-1">▸</span>
+                            <span className="flex-1">{line.trim().substring(1).trim()}</span>
+                          </div>
+                        );
+                      } else if (line.trim().startsWith('**') || line.trim().match(/^[A-Z][^:]*:/)) {
+                        return (
+                          <div key={idx} className="font-semibold text-purple-300 mt-2 mb-1">
+                            {line.replace(/\*\*/g, '')}
+                          </div>
+                        );
+                      } else if (line.trim()) {
+                        return <p key={idx} className="text-slate-300">{line}</p>;
+                      }
+                      return <br key={idx} />;
+                    })}
+                  </div>
+                  <button
+                    onClick={() => setAiStrategy(null)}
+                    className="mt-3 w-full px-3 py-1.5 bg-slate-700/50 hover:bg-slate-700 text-slate-300 rounded text-xs transition-colors"
+                  >
+                    Clear
+                  </button>
                 </div>
               )}
             </div>
