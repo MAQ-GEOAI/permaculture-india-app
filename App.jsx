@@ -396,10 +396,12 @@ const App = () => {
           zoomControl: true
         });
         
-        // Add basemap
-        const tileLayer = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
-          attribution: '© Esri',
-          maxZoom: 19
+        // Add basemap with crossOrigin for exports
+        const defaultBasemap = basemapConfigs.satellite;
+        const tileLayer = L.tileLayer(defaultBasemap.url, {
+          attribution: defaultBasemap.attribution,
+          maxZoom: defaultBasemap.maxZoom,
+          crossOrigin: 'anonymous' // CRITICAL: Enable CORS for html2canvas export
         });
         
         tileLayer.addTo(map);
@@ -1329,11 +1331,16 @@ const App = () => {
       return;
     }
     
+    // Create abort controller for this analysis
+    const abortController = new AbortController();
+    analysisAbortControllerRef.current = abortController;
+    
     // Global timeout for entire analysis (2 minutes max - ensure completion)
     const analysisTimeout = setTimeout(() => {
       logError('Analysis timed out after 2 minutes');
       showToast('Analysis timed out. Try a smaller area or check backend logs.', 'error');
       setIsAnalyzing(false);
+      abortController.abort();
     }, 120000); // 2 minutes
     
     try {
@@ -1365,13 +1372,16 @@ const App = () => {
         const controller = new AbortController();
         let timeoutId;
         
+        // Get abort signal from ref if available
+        const abortSignal = analysisAbortControllerRef.current?.signal;
+        
         // Combine signals: both timeout and analysis cancellation
-        if (signal.aborted) {
+        if (abortSignal?.aborted) {
           throw new Error('Analysis cancelled');
         }
         
         // Create combined abort controller
-        const combinedSignal = signal.aborted ? controller.signal : signal;
+        const combinedSignal = abortSignal?.aborted ? controller.signal : (abortSignal || controller.signal);
         
         if (progressMessage) {
           setAnalysisProgress(prev => ({ ...prev, message: progressMessage }));
@@ -1813,7 +1823,8 @@ const App = () => {
       // Handle backend connection errors gracefully
       console.error('Analysis error:', error);
       
-      if (signal.aborted || error.message?.includes('cancelled')) {
+      const abortSignal = analysisAbortControllerRef.current?.signal;
+      if (abortSignal?.aborted || error.message?.includes('cancelled')) {
         showToast('Analysis cancelled by user', 'info');
         return;
       }
